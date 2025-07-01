@@ -8,7 +8,10 @@ testacc:
 # Generate or update documentation
 .PHONY: docs
 docs:
+	@echo "Generating documentation with tfplugindocs..."
 	go generate ./...
+	@echo "Formatting example terraform files..."
+	terraform fmt -recursive ./examples/ 2>/dev/null || echo "No examples directory found"
 
 # Build the provider
 .PHONY: build

@@ -9,7 +9,6 @@ import (
 	"github.com/maximenony/terraform-provider-lws/internal/provider"
 )
 
-//go:generate terraform fmt -recursive ./examples/
 //go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs generate -provider-name lws
 
 var (
