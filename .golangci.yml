@@ -25,6 +25,7 @@ linters:
     - unconvert
     - gofmt
     - gci
+    - gosec          # Security analysis
   disable:
     - revive         # Causing rule errors
     - gocognit       # Too strict for tests

@@ -87,10 +87,7 @@ deps:
 verify:
 	go mod verify
 
-# Security scan with golangci-lint (includes gosec)
-.PHONY: security
-security:
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run --no-config --enable=gosec
+# Security scan is now integrated in the main lint target with gosec enabled
 
 # Lint and fix auto-fixable issues
 .PHONY: lint-fix
@@ -115,7 +112,7 @@ release-test:
 
 # Full CI workflow locally
 .PHONY: ci
-ci: deps verify fmt lint security test-coverage
+ci: deps verify fmt lint test-coverage
 
 # Development workflow
 .PHONY: dev
