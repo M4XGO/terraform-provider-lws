@@ -107,24 +107,38 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Import GPG key for commit signing
+      if: steps.check_secrets.outputs.gpg_exists == 'false' || github.event.inputs.force_regenerate == 'true'
+      uses: crazy-max/ghaction-import-gpg@v6
+      id: import_gpg_commit
+      with:
+        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+        passphrase: ${{ secrets.GPG_PASSPHRASE }}
+        git_user_signingkey: true
+        git_commit_gpgsign: true
+
     - name: Trigger release workflow
       if: steps.check_secrets.outputs.gpg_exists == 'false' || github.event.inputs.force_regenerate == 'true'
       run: |
         echo "🚀 Triggering new release to test GPG signing..."
         
-        # Créer un commit vide pour déclencher semantic-release
+        # Configurer Git avec signature GPG
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global user.signingkey ${{ steps.import_gpg_commit.outputs.fingerprint }}
+        git config --global commit.gpgsign true
         
-        git commit --allow-empty -m "ci: trigger release with GPG signing enabled
+        # Créer un commit signé pour déclencher semantic-release
+        git commit --allow-empty -S -m "ci: trigger release with GPG signing enabled
         
         - GPG keys automatically generated and configured
         - This should resolve Terraform Registry validation errors
-        - SHASUMS files and signatures will now be created"
+        - SHASUMS files and signatures will now be created
+        - Commits and tags are now GPG signed"
         
         git push origin main
         
-        echo "✅ Release triggered successfully"
+        echo "✅ Release triggered successfully with GPG signed commit"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -135,9 +149,10 @@ jobs:
         echo "### ✅ Actions Completed:" >> $GITHUB_STEP_SUMMARY
         echo "- GPG key pair generated automatically" >> $GITHUB_STEP_SUMMARY
         echo "- GitHub secrets configured (GPG_PRIVATE_KEY, GPG_PASSPHRASE)" >> $GITHUB_STEP_SUMMARY
-        echo "- New release triggered to test GPG signing" >> $GITHUB_STEP_SUMMARY
+        echo "- New release triggered with GPG signed commit" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 📋 Expected Results:" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ GPG signed tags and commits" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ SHASUMS file will be created" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ SHASUMS.sig signature file will be created" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ Multi-platform binaries will be available" >> $GITHUB_STEP_SUMMARY
@@ -146,4 +161,5 @@ jobs:
         echo "### 🔗 Next Steps:" >> $GITHUB_STEP_SUMMARY
         echo "1. Wait for the release workflow to complete" >> $GITHUB_STEP_SUMMARY
         echo "2. Check GitHub Releases for the new artifacts" >> $GITHUB_STEP_SUMMARY
-        echo "3. Verify on registry.terraform.io (after registration)" >> $GITHUB_STEP_SUMMARY 
+        echo "3. Verify GPG signatures with: git tag --verify <tag>" >> $GITHUB_STEP_SUMMARY
+        echo "4. Register on registry.terraform.io" >> $GITHUB_STEP_SUMMARY 
