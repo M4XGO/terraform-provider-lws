@@ -8,6 +8,11 @@ import (
 	"testing"
 )
 
+const (
+	testIP4Address = "192.168.1.2"
+	testDomainName = "example.com"
+)
+
 func TestLWSClient_CreateDNSRecord(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -68,7 +73,7 @@ func TestLWSClient_CreateDNSRecord(t *testing.T) {
 				}
 
 				w.WriteHeader(tt.responseStatus)
-				w.Write([]byte(tt.responseBody))
+				_, _ = w.Write([]byte(tt.responseBody))
 			}))
 			defer server.Close()
 
@@ -153,7 +158,7 @@ func TestLWSClient_GetDNSRecord(t *testing.T) {
 				}
 
 				w.WriteHeader(tt.responseStatus)
-				w.Write([]byte(tt.responseBody))
+				_, _ = w.Write([]byte(tt.responseBody))
 			}))
 			defer server.Close()
 
@@ -194,7 +199,7 @@ func TestLWSClient_UpdateDNSRecord(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"success": true, "data": {"id": "12345", "name": "www", "type": "A", "value": "192.168.1.2", "zone": "example.com", "ttl": 3600}, "message": "Record updated"}`))
+		_, _ = w.Write([]byte(`{"success": true, "data": {"id": "12345", "name": "www", "type": "A", "value": "` + testIP4Address + `", "zone": "` + testDomainName + `", "ttl": 3600}, "message": "Record updated"}`))
 	}))
 	defer server.Close()
 
@@ -204,8 +209,8 @@ func TestLWSClient_UpdateDNSRecord(t *testing.T) {
 		ID:    "12345",
 		Name:  "www",
 		Type:  "A",
-		Value: "192.168.1.2", // Updated value
-		Zone:  "example.com",
+		Value: testIP4Address, // Updated value
+		Zone:  testDomainName,
 		TTL:   3600,
 	}
 
@@ -215,8 +220,8 @@ func TestLWSClient_UpdateDNSRecord(t *testing.T) {
 	}
 	if updatedRecord == nil {
 		t.Errorf("Expected updated record, got nil")
-	} else if updatedRecord.Value != "192.168.1.2" {
-		t.Errorf("Expected updated value 192.168.1.2, got %s", updatedRecord.Value)
+	} else if updatedRecord.Value != testIP4Address {
+		t.Errorf("Expected updated value %s, got %s", testIP4Address, updatedRecord.Value)
 	}
 }
 
@@ -227,7 +232,7 @@ func TestLWSClient_DeleteDNSRecord(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"success": true, "message": "Record deleted"}`))
+		_, _ = w.Write([]byte(`{"success": true, "message": "Record deleted"}`))
 	}))
 	defer server.Close()
 
@@ -275,7 +280,7 @@ func TestLWSClient_GetDNSZone(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(responseBody))
+		_, _ = w.Write([]byte(responseBody))
 	}))
 	defer server.Close()
 
@@ -289,8 +294,8 @@ func TestLWSClient_GetDNSZone(t *testing.T) {
 	if zone == nil {
 		t.Errorf("Expected zone, got nil")
 	} else {
-		if zone.Name != "example.com" {
-			t.Errorf("Expected zone name example.com, got %s", zone.Name)
+		if zone.Name != testDomainName {
+			t.Errorf("Expected zone name %s, got %s", testDomainName, zone.Name)
 		}
 		if len(zone.Records) != 2 {
 			t.Errorf("Expected 2 records, got %d", len(zone.Records))
@@ -305,12 +310,12 @@ func TestLWSClient_Authentication(t *testing.T) {
 
 		if login != "correctlogin" || apiKey != "correctkey" {
 			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte(`{"success": false, "error": "Unauthorized"}`))
+			_, _ = w.Write([]byte(`{"success": false, "error": "Unauthorized"}`))
 			return
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"success": true, "data": {"id": "123", "name": "test", "type": "A", "value": "1.1.1.1", "zone": "test.com", "ttl": 3600}}`))
+		_, _ = w.Write([]byte(`{"success": true, "data": {"id": "123", "name": "test", "type": "A", "value": "1.1.1.1", "zone": "test.com", "ttl": 3600}}`))
 	}))
 	defer server.Close()
 

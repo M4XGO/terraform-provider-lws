@@ -10,6 +10,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
+const (
+	testRecordEndpoint = "/dns/record/rec_12345"
+)
+
 func TestProvider_CompleteWorkflow(t *testing.T) {
 	// Create a mock LWS API server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -18,7 +22,7 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 		case r.URL.Path == "/dns/record" && r.Method == http.MethodPost:
 			// Create DNS record
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{
+			_, _ = w.Write([]byte(`{
 				"success": true,
 				"data": {
 					"id": "rec_12345",
@@ -30,10 +34,10 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 				}
 			}`))
 
-		case r.URL.Path == "/dns/record/rec_12345" && r.Method == http.MethodGet:
+		case r.URL.Path == testRecordEndpoint && r.Method == http.MethodGet:
 			// Get DNS record
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{
+			_, _ = w.Write([]byte(`{
 				"success": true,
 				"data": {
 					"id": "rec_12345",
@@ -45,10 +49,10 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 				}
 			}`))
 
-		case r.URL.Path == "/dns/record/rec_12345" && r.Method == http.MethodPut:
+		case r.URL.Path == testRecordEndpoint && r.Method == http.MethodPut:
 			// Update DNS record
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{
+			_, _ = w.Write([]byte(`{
 				"success": true,
 				"data": {
 					"id": "rec_12345",
@@ -60,10 +64,10 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 				}
 			}`))
 
-		case r.URL.Path == "/dns/record/rec_12345" && r.Method == http.MethodDelete:
+		case r.URL.Path == testRecordEndpoint && r.Method == http.MethodDelete:
 			// Delete DNS record
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{
+			_, _ = w.Write([]byte(`{
 				"success": true,
 				"message": "Record deleted"
 			}`))
@@ -71,7 +75,7 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 		case r.URL.Path == "/dns/zone/example.com" && r.Method == http.MethodGet:
 			// Get DNS zone
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{
+			_, _ = w.Write([]byte(`{
 				"success": true,
 				"data": {
 					"name": "example.com",
@@ -90,7 +94,7 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 
 		default:
 			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte(`{"success": false, "error": "Endpoint not found"}`))
+			_, _ = w.Write([]byte(`{"success": false, "error": "Endpoint not found"}`))
 		}
 	}))
 	defer server.Close()
@@ -165,21 +169,21 @@ func TestProvider_ErrorHandling(t *testing.T) {
 		case "/dns/record":
 			// Simulate API error
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(`{"success": false, "error": "Invalid zone name"}`))
+			_, _ = w.Write([]byte(`{"success": false, "error": "Invalid zone name"}`))
 
 		case "/dns/record/nonexistent":
 			// Simulate not found
 			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte(`{"success": false, "error": "Record not found"}`))
+			_, _ = w.Write([]byte(`{"success": false, "error": "Record not found"}`))
 
 		case "/dns/zone/nonexistent.com":
 			// Simulate zone not found
 			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte(`{"success": false, "error": "Zone not found"}`))
+			_, _ = w.Write([]byte(`{"success": false, "error": "Zone not found"}`))
 
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"success": false, "error": "Internal server error"}`))
+			_, _ = w.Write([]byte(`{"success": false, "error": "Internal server error"}`))
 		}
 	}))
 	defer server.Close()
@@ -255,10 +259,10 @@ func TestProvider_Authentication(t *testing.T) {
 
 				if login == "validlogin" && apiKey == "validkey" {
 					w.WriteHeader(http.StatusOK)
-					w.Write([]byte(`{"success": true, "data": {"id": "test"}}`))
+					_, _ = w.Write([]byte(`{"success": true, "data": {"id": "test"}}`))
 				} else {
 					w.WriteHeader(http.StatusUnauthorized)
-					w.Write([]byte(`{"success": false, "error": "Unauthorized"}`))
+					_, _ = w.Write([]byte(`{"success": false, "error": "Unauthorized"}`))
 				}
 			}))
 			defer server.Close()

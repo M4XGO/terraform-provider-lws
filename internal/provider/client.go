@@ -87,7 +87,7 @@ func (c *LWSClient) makeRequest(ctx context.Context, method, endpoint string, bo
 	if err != nil {
 		return nil, fmt.Errorf("error making request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {

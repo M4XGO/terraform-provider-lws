@@ -1,0 +1,210 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version à releaser (ex: v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  GO_VERSION: '1.22'
+  TERRAFORM_VERSION: '1.6.0'
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.release.outputs.upload_url }}
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Extract tag
+      id: tag
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Import GPG key
+      uses: crazy-max/ghaction-import-gpg@v6
+      id: import_gpg
+      with:
+        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+        passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+    - name: Verify GPG key
+      run: |
+        echo "GPG fingerprint: ${{ steps.import_gpg.outputs.fingerprint }}"
+        gpg --list-secret-keys --keyid-format LONG
+
+    - name: Run tests
+      run: |
+        go mod download
+        make test
+
+    - name: Check GoReleaser config
+      uses: goreleaser/goreleaser-action@v5
+      with:
+        distribution: goreleaser
+        version: latest
+        args: check
+
+    - name: Run GoReleaser
+      uses: goreleaser/goreleaser-action@v5
+      with:
+        distribution: goreleaser
+        version: latest
+        args: release --clean
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+
+    - name: Upload artifacts to job outputs
+      id: release
+      run: |
+        echo "upload_url=${{ github.event.release.upload_url }}" >> $GITHUB_OUTPUT
+
+  validate-terraform-registry:
+    runs-on: ubuntu-latest
+    needs: goreleaser
+    strategy:
+      matrix:
+        terraform-version: ['1.5.0', '1.6.0', '1.7.0']
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Terraform ${{ matrix.terraform-version }}
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ matrix.terraform-version }}
+
+    - name: Create test Terraform configuration
+      run: |
+        mkdir -p test-config
+        cat > test-config/main.tf << 'EOF'
+        terraform {
+          required_version = ">= 1.5.0"
+          required_providers {
+            lws = {
+              source  = "maximenony/lws"
+              version = "${{ needs.goreleaser.outputs.tag }}"
+            }
+          }
+        }
+
+        provider "lws" {
+          # Configuration will be provided via environment variables
+        }
+
+        # Test data source
+        data "lws_dns_zone" "test" {
+          name = "example.com"
+        }
+        EOF
+
+    - name: Test Terraform init
+      run: |
+        cd test-config
+        terraform init -upgrade
+      env:
+        TF_LOG: DEBUG
+
+    - name: Test Terraform validate
+      run: |
+        cd test-config
+        terraform validate
+
+  create-provider-badge:
+    runs-on: ubuntu-latest
+    needs: [goreleaser, validate-terraform-registry]
+    if: always() && needs.goreleaser.result == 'success'
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update README with badge
+      run: |
+        # Créer ou mettre à jour le badge Terraform Provider
+        BADGE='[![Terraform Provider](https://img.shields.io/badge/terraform-provider-623CE4?style=flat&logo=terraform)](https://registry.terraform.io/providers/maximenony/lws/latest)'
+        REGISTRY_BADGE='[![Terraform Registry](https://img.shields.io/badge/terraform-registry-623CE4?style=flat&logo=terraform)](https://registry.terraform.io/providers/maximenony/lws/latest)'
+        VERSION_BADGE="[![Latest Release](https://img.shields.io/github/v/release/maximenony/terraform-provider-lws?style=flat&logo=github)](https://github.com/maximenony/terraform-provider-lws/releases/latest)"
+        
+        # Ajouter les badges en haut du README s'ils ne sont pas déjà présents
+        if ! grep -q "terraform-provider" README.md; then
+          echo "Ajout des badges au README..."
+          sed -i '1i\\n'"$BADGE"' '"$REGISTRY_BADGE"' '"$VERSION_BADGE"'\n' README.md
+        fi
+
+    - name: Commit badge changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add README.md
+        if git diff --staged --quiet; then
+          echo "Aucun changement à committer"
+        else
+          git commit -m "docs: update badges for release ${{ needs.goreleaser.outputs.tag }}"
+          git push
+        fi
+
+  notify-success:
+    runs-on: ubuntu-latest
+    needs: [goreleaser, validate-terraform-registry, create-provider-badge]
+    if: always()
+    steps:
+    - name: Report results
+      run: |
+        echo "## 🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** ${{ needs.goreleaser.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+        echo "**GoReleaser:** ${{ needs.goreleaser.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Terraform Validation:** ${{ needs.validate-terraform-registry.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Badge Update:** ${{ needs.create-provider-badge.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 Artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "- [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.goreleaser.outputs.tag }})" >> $GITHUB_STEP_SUMMARY
+        echo "- [Terraform Registry](https://registry.terraform.io/providers/maximenony/lws/latest)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🚀 Usage" >> $GITHUB_STEP_SUMMARY
+        echo '```hcl' >> $GITHUB_STEP_SUMMARY
+        echo 'terraform {' >> $GITHUB_STEP_SUMMARY
+        echo '  required_providers {' >> $GITHUB_STEP_SUMMARY
+        echo '    lws = {' >> $GITHUB_STEP_SUMMARY
+        echo '      source  = "maximenony/lws"' >> $GITHUB_STEP_SUMMARY
+        echo '      version = "${{ needs.goreleaser.outputs.tag }}"' >> $GITHUB_STEP_SUMMARY
+        echo '    }' >> $GITHUB_STEP_SUMMARY
+        echo '  }' >> $GITHUB_STEP_SUMMARY
+        echo '}' >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ needs.goreleaser.result }}" = "success" ] && [ "${{ needs.validate-terraform-registry.result }}" = "success" ]; then
+          echo "✅ Release completed successfully!"
+        else
+          echo "❌ Release failed. Check the logs above."
+          exit 1
+        fi 

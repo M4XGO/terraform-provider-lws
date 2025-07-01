@@ -34,7 +34,7 @@ fmt:
 # Lint code
 .PHONY: lint
 lint:
-	golangci-lint run
+	go run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run
 
 # Test the provider (unit tests only)
 .PHONY: test
@@ -77,4 +77,73 @@ test-all:
 .PHONY: deps
 deps:
 	go mod download
-	go mod tidy 
+	go mod tidy
+
+# Verify dependencies
+.PHONY: verify
+verify:
+	go mod verify
+
+# Security scan with golangci-lint (includes gosec)
+.PHONY: security
+security:
+	go run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run --no-config --enable=gosec
+
+# Lint and fix auto-fixable issues
+.PHONY: lint-fix
+lint-fix:
+	go run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run --fix
+
+# Install development tools
+.PHONY: tools
+tools:
+	go install github.com/goreleaser/goreleaser@latest
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+# Validate GoReleaser configuration
+.PHONY: release-check
+release-check:
+	goreleaser check
+
+# Test release build (snapshot)
+.PHONY: release-test
+release-test:
+	goreleaser build --snapshot --clean
+
+# Full CI workflow locally
+.PHONY: ci
+ci: deps verify fmt lint security test-coverage
+
+# Development workflow
+.PHONY: dev
+dev: deps fmt lint test
+
+# Pre-commit hooks
+.PHONY: pre-commit
+pre-commit: fmt lint test-unit
+
+# Help target
+.PHONY: help
+help:
+	@echo "Available targets:"
+	@echo "  build             - Build the provider binary"
+	@echo "  test              - Run unit tests"
+	@echo "  test-coverage     - Run tests with coverage"
+	@echo "  test-integration  - Run integration tests"
+	@echo "  test-validation   - Run validation tests"
+	@echo "  test-all          - Run all tests including acceptance"
+	@echo "  testacc           - Run acceptance tests (requires credentials)"
+	@echo "  lint              - Run linters"
+	@echo "  lint-fix          - Run linters and auto-fix issues"
+	@echo "  security          - Run security scans"
+	@echo "  fmt               - Format code"
+	@echo "  install           - Install provider locally"
+	@echo "  release-check     - Validate GoReleaser config"
+	@echo "  release-test      - Test release build"
+	@echo "  ci                - Run full CI workflow"
+	@echo "  dev               - Development workflow"
+	@echo "  clean             - Clean build artifacts"
+	@echo "  tools             - Install development tools"
+	@echo "  deps              - Download dependencies"
+	@echo "  verify            - Verify dependencies"
+	@echo "  help              - Show this help" 

@@ -13,12 +13,12 @@ func TestDNSRecordResource_Metadata(t *testing.T) {
 	r := NewDNSRecordResource()
 	resp := &resource.MetadataResponse{}
 	req := resource.MetadataRequest{
-		ProviderTypeName: "lws",
+		ProviderTypeName: ProviderTypeName,
 	}
 
 	r.Metadata(context.Background(), req, resp)
 
-	expected := "lws_dns_record"
+	expected := ProviderTypeName + "_dns_record"
 	if resp.TypeName != expected {
 		t.Errorf("Expected TypeName %s, got %s", expected, resp.TypeName)
 	}
@@ -194,6 +194,7 @@ func TestDNSRecordResourceModel_Validation(t *testing.T) {
 			if tt.model.TTL.IsNull() {
 				// In real implementation, this would default to 3600
 				// Here we just verify the field can be null
+				t.Logf("TTL is null for test case: %s", tt.name)
 			}
 		})
 	}

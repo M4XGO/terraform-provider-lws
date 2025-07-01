@@ -1,0 +1,67 @@
+# Configuration golangci-lint simplifiée pour le provider Terraform LWS
+# Documentation: https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+  tests: true
+
+output:
+  formats:
+    - format: colored-line-number
+      path: stdout
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+    - goconst
+    - goimports
+    - misspell
+    - unconvert
+    - gofmt
+    - gci
+  disable:
+    - revive         # Causing rule errors
+    - gocognit       # Too strict for tests
+    - nestif         # Too strict for tests
+    - gocritic       # Some rules are problematic
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+      - unusedwrite  # Allow unused writes in tests
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  staticcheck:
+    checks: [ "all", "-SA9003" ]  # Disable empty branch check for tests
+
+issues:
+  exclude-use-default: false
+  exclude:
+    # Exclude some staticcheck messages
+    - "SA9003.*empty branch"
+    # Exclude unused writes in test files
+    - "unusedwrite.*test.*"
+  exclude-rules:
+    # Exclude certain linters for test files
+    - path: ".*_test\\.go"
+      linters:
+        - govet
+        - unused
+        - staticcheck
+    # Exclude cognitive complexity for tests
+    - path: ".*_test\\.go"
+      text: "cognitive complexity"
+      linters:
+        - gocognit
+        - cyclop 

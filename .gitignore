@@ -47,3 +47,4 @@ dist/
 # Documentation
 docs/ 
 mykey-private.asc
+public-key.asc

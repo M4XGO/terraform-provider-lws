@@ -25,8 +25,9 @@ func TestLWSProvider_Metadata(t *testing.T) {
 
 	p.Metadata(context.Background(), req, resp)
 
-	if resp.TypeName != "lws" {
-		t.Errorf("Expected TypeName to be 'lws', got %s", resp.TypeName)
+	expected := ProviderTypeName
+	if resp.TypeName != expected {
+		t.Errorf("Expected TypeName to be '%s', got %s", expected, resp.TypeName)
 	}
 
 	if resp.Version != "1.0.0" {

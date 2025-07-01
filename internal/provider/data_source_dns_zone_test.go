@@ -13,12 +13,12 @@ func TestDNSZoneDataSource_Metadata(t *testing.T) {
 	d := NewDNSZoneDataSource()
 	resp := &datasource.MetadataResponse{}
 	req := datasource.MetadataRequest{
-		ProviderTypeName: "lws",
+		ProviderTypeName: ProviderTypeName,
 	}
 
 	d.Metadata(context.Background(), req, resp)
 
-	expected := "lws_dns_zone"
+	expected := ProviderTypeName + "_dns_zone"
 	if resp.TypeName != expected {
 		t.Errorf("Expected TypeName %s, got %s", expected, resp.TypeName)
 	}

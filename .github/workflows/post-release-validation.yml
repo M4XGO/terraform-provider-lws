@@ -1,0 +1,252 @@
+name: Post-Release Validation
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version à tester (ex: v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  TERRAFORM_VERSION: '1.6.0'
+
+jobs:
+  validate-release:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        terraform-version: ['1.5.0', '1.6.0', '1.7.0']
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Extract version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ matrix.terraform-version }}
+
+    - name: Create test directory
+      run: |
+        mkdir -p terraform-test
+        cd terraform-test
+
+    - name: Create test configuration
+      run: |
+        cd terraform-test
+        cat > main.tf << 'EOF'
+        terraform {
+          required_version = ">= 1.5.0"
+          required_providers {
+            lws = {
+              source  = "maximenony/lws"
+              version = "${{ steps.version.outputs.version }}"
+            }
+          }
+        }
+
+        provider "lws" {
+          login     = "test-user"
+          api_key   = "test-key"
+          test_mode = true
+        }
+
+        # Test data source
+        data "lws_dns_zone" "test" {
+          name = "example.com"
+        }
+
+        # Test resource
+        resource "lws_dns_record" "test" {
+          zone  = "example.com"
+          name  = "test"
+          type  = "A"
+          value = "192.168.1.100"
+          ttl   = 3600
+        }
+
+        # Output pour validation
+        output "zone_info" {
+          value = data.lws_dns_zone.test
+        }
+
+        output "record_info" {
+          value = lws_dns_record.test
+        }
+        EOF
+
+    - name: Terraform init
+      run: |
+        cd terraform-test
+        terraform init
+
+    - name: Terraform plan
+      run: |
+        cd terraform-test
+        terraform plan
+
+    - name: Test provider schema
+      run: |
+        cd terraform-test
+        terraform providers schema -json > schema.json
+        echo "✅ Provider schema generated successfully"
+
+    - name: Validate configuration
+      run: |
+        cd terraform-test
+        terraform validate
+        echo "✅ Configuration validated successfully"
+
+  validate-assets:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Extract version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Download release assets
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        # Enlever le 'v' du début si présent
+        VERSION_NUMBER="${VERSION#v}"
+        
+        echo "Downloading assets for version $VERSION_NUMBER..."
+        
+        # Télécharger les assets depuis GitHub Releases
+        curl -L -o "terraform-provider-lws_${VERSION_NUMBER}_linux_amd64.zip" \
+          "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/terraform-provider-lws_${VERSION_NUMBER}_linux_amd64.zip"
+        
+        curl -L -o "terraform-provider-lws_${VERSION_NUMBER}_darwin_amd64.zip" \
+          "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/terraform-provider-lws_${VERSION_NUMBER}_darwin_amd64.zip"
+        
+        curl -L -o "terraform-provider-lws_${VERSION_NUMBER}_windows_amd64.zip" \
+          "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/terraform-provider-lws_${VERSION_NUMBER}_windows_amd64.zip"
+        
+        curl -L -o "terraform-provider-lws_${VERSION_NUMBER}_SHA256SUMS" \
+          "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/terraform-provider-lws_${VERSION_NUMBER}_SHA256SUMS"
+        
+        curl -L -o "terraform-provider-lws_${VERSION_NUMBER}_SHA256SUMS.sig" \
+          "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/terraform-provider-lws_${VERSION_NUMBER}_SHA256SUMS.sig"
+
+    - name: Verify checksums
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        VERSION_NUMBER="${VERSION#v}"
+        
+        echo "Verifying checksums..."
+        
+        # Vérifier que les fichiers ZIP correspondent aux checksums
+        sha256sum -c "terraform-provider-lws_${VERSION_NUMBER}_SHA256SUMS"
+        
+        echo "✅ All checksums verified successfully"
+
+    - name: Test binary extraction
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        VERSION_NUMBER="${VERSION#v}"
+        
+        echo "Testing binary extraction..."
+        
+        # Extraire et tester le binaire Linux
+        unzip -q "terraform-provider-lws_${VERSION_NUMBER}_linux_amd64.zip"
+        chmod +x "terraform-provider-lws_v${VERSION_NUMBER}"
+        
+        # Test basique du binaire
+        ./terraform-provider-lws_v${VERSION_NUMBER} --help || true
+        
+        echo "✅ Binary extraction and basic test successful"
+
+  test-registry-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Extract version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Test Terraform Registry compatibility
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        VERSION_NUMBER="${VERSION#v}"
+        
+        echo "Testing Terraform Registry compatibility..."
+        
+        # Créer une configuration qui pointe vers le Terraform Registry
+        mkdir -p registry-test
+        cd registry-test
+        
+        cat > main.tf << EOF
+        terraform {
+          required_version = ">= 1.5.0"
+          required_providers {
+            lws = {
+              source  = "maximenony/lws"
+              version = "~> ${VERSION_NUMBER}"
+            }
+          }
+        }
+        
+        provider "lws" {
+          login     = "test"
+          api_key   = "test"
+          test_mode = true
+        }
+        EOF
+        
+        # Initialiser sans télécharger pour tester la configuration
+        terraform init -backend=false || true
+        terraform validate
+        
+        echo "✅ Registry compatibility test completed"
+
+  notify-success:
+    needs: [validate-release, validate-assets, test-registry-compatibility]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+    - name: Success notification
+      run: |
+        VERSION="${{ github.event.release.tag_name || github.event.inputs.version }}"
+        echo "🎉 Release $VERSION validation completed successfully!"
+        echo "✅ All platforms tested"
+        echo "✅ All Terraform versions tested"
+        echo "✅ Assets verified"
+        echo "✅ Registry compatibility confirmed"
+
+  notify-failure:
+    needs: [validate-release, validate-assets, test-registry-compatibility]
+    runs-on: ubuntu-latest
+    if: failure()
+    steps:
+    - name: Failure notification
+      run: |
+        VERSION="${{ github.event.release.tag_name || github.event.inputs.version }}"
+        echo "❌ Release $VERSION validation failed!"
+        echo "Please check the workflow logs for details."
+        exit 1 

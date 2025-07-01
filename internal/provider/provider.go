@@ -12,6 +12,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
+// Nom du provider
+const ProviderTypeName = "lws"
+
 // Ensure LWSProvider satisfies various provider interfaces.
 var _ provider.Provider = &LWSProvider{}
 
@@ -32,7 +35,7 @@ type LWSProviderModel struct {
 }
 
 func (p *LWSProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "lws"
+	resp.TypeName = ProviderTypeName
 	resp.Version = p.version
 }
 
