@@ -79,10 +79,12 @@ jobs:
         go-version: ${{ env.GO_VERSION }}
         cache: true
 
-    - name: Run Gosec Security Scanner
+    - name: Install Gosec
       run: |
-        go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
-        gosec ./...
+        curl -sfL https://raw.githubusercontent.com/securecodewarrior/gosec/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.20.0
+
+    - name: Run Gosec Security Scanner
+      run: gosec ./...
 
   validate-goreleaser:
     runs-on: ubuntu-latest
@@ -102,14 +104,14 @@ jobs:
       uses: goreleaser/goreleaser-action@v5
       with:
         distribution: goreleaser
-        version: latest
+        version: v1.26.2
         args: check
 
     - name: Test GoReleaser build (snapshot)
       uses: goreleaser/goreleaser-action@v5
       with:
         distribution: goreleaser
-        version: latest
+        version: v1.26.2
         args: build --snapshot --clean
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

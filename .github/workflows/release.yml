@@ -67,14 +67,14 @@ jobs:
       uses: goreleaser/goreleaser-action@v5
       with:
         distribution: goreleaser
-        version: latest
+        version: v1.26.2
         args: check
 
     - name: Run GoReleaser
       uses: goreleaser/goreleaser-action@v5
       with:
         distribution: goreleaser
-        version: latest
+        version: v1.26.2
         args: release --clean
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

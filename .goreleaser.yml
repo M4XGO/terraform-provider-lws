@@ -1,6 +1,5 @@
 # Configuration GoReleaser pour le Terraform Registry
 # Documentation: https://goreleaser.com
-version: 2
 
 before:
   hooks:
@@ -110,8 +109,3 @@ changelog:
       order: 5
     - title: Others
       order: 999
-
-# Validation des artefacts pour le Terraform Registry
-validation:
-  # S'assurer que tous les artefacts requis sont présents
-  enabled: true 
