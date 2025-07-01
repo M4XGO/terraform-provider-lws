@@ -1,3 +1,15 @@
+# [2.0.0](https://github.com/M4XGO/terraform-provider-lws/compare/v1.0.3...v2.0.0) (2025-07-01)
+
+
+### Bug Fixes
+
+* **release:** temporarily disable GPG signing for testing ([e6f902c](https://github.com/M4XGO/terraform-provider-lws/commit/e6f902c4568df6d1656e393108b006b36a1ba9ac))
+
+
+### BREAKING CHANGES
+
+* **release:** Releases will not be signed until GPG keys are configured in GitHub secrets
+
 ## [1.0.3](https://github.com/M4XGO/terraform-provider-lws/compare/v1.0.2...v1.0.3) (2025-07-01)
 
 
