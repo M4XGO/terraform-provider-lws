@@ -1,3 +1,10 @@
+# [2.2.0](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.0...v2.2.0) (2025-07-01)
+
+
+### Features
+
+* enable complete GPG signing for Terraform Registry compliance ([6a7dd80](https://github.com/M4XGO/terraform-provider-lws/commit/6a7dd800763ee58cb6b6582737bd7212df25135e))
+
 # [2.1.0](https://github.com/M4XGO/terraform-provider-lws/compare/v2.0.1...v2.1.0) (2025-07-01)
 
 
