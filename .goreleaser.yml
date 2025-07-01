@@ -45,17 +45,18 @@ checksum:
   name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
   algorithm: sha256
 
-signs:
-  - artifacts: checksum
-    args:
-      # Signature GPG requise par le Terraform Registry
-      - "--batch"
-      - "--local-user"
-      - "{{ .Env.GPG_FINGERPRINT }}"
-      - "--output"
-      - "${signature}"
-      - "--detach-sign"
-      - "${artifact}"
+# Signature GPG temporairement désactivée pour les tests
+# signs:
+#   - artifacts: checksum
+#     args:
+#       # Signature GPG requise par le Terraform Registry
+#       - "--batch"
+#       - "--local-user"
+#       - "{{ .Env.GPG_FINGERPRINT }}"
+#       - "--output"
+#       - "${signature}"
+#       - "--detach-sign"
+#       - "${artifact}"
 
 # Configuration pour GitHub Release
 release:
