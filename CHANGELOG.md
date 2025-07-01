@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/M4XGO/terraform-provider-lws/compare/v1.0.2...v1.0.3) (2025-07-01)
+
+
+### Bug Fixes
+
+* **ci:** remove standalone gosec job and integrate security scanning into golangci-lint ([3f787e0](https://github.com/M4XGO/terraform-provider-lws/commit/3f787e0807c1812a584379cd03c90a7ac3d26277))
+
 ## [1.0.2](https://github.com/M4XGO/terraform-provider-lws/compare/v1.0.1...v1.0.2) (2025-07-01)
 
 
