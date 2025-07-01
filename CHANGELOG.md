@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/M4XGO/terraform-provider-lws/compare/v2.0.1...v2.1.0) (2025-07-01)
+
+
+### Features
+
+* add automated GPG setup workflow for Terraform Registry ([8fec6e3](https://github.com/M4XGO/terraform-provider-lws/commit/8fec6e3ef7c12b7254009b2b173ff7863f92d1f1))
+
 ## [2.0.1](https://github.com/M4XGO/terraform-provider-lws/compare/v2.0.0...v2.0.1) (2025-07-01)
 
 
