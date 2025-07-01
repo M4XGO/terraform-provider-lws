@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/M4XGO/terraform-provider-lws/compare/v2.0.0...v2.0.1) (2025-07-01)
+
+
+### Bug Fixes
+
+* enable GPG signing and resolve Terraform Registry validation errors ([47ce61c](https://github.com/M4XGO/terraform-provider-lws/commit/47ce61c1ff31d5abd0999d74821d9c4e62471bdd))
+
 # [2.0.0](https://github.com/M4XGO/terraform-provider-lws/compare/v1.0.3...v2.0.0) (2025-07-01)
 
 
