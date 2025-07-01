@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/M4XGO/terraform-provider-lws/compare/v1.0.1...v1.0.2) (2025-07-01)
+
+
+### Bug Fixes
+
+* **ci:** improve gosec installation reliability ([422df97](https://github.com/M4XGO/terraform-provider-lws/commit/422df97d953508781195a429d6840ed41f7c3f75))
+
 ## [1.0.1](https://github.com/M4XGO/terraform-provider-lws/compare/v1.0.0...v1.0.1) (2025-07-01)
 
 
