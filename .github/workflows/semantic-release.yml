@@ -72,8 +72,8 @@ jobs:
 
     - name: Install semantic-release dependencies
       run: |
-        # Installation globale optimisée avec versions spécifiques
-        npm install -g semantic-release@^22.0.0 @semantic-release/changelog@^6.0.0 @semantic-release/git@^10.0.0 @semantic-release/github@^9.0.0 @semantic-release/exec@^6.0.0
+        # Installation globale avec toutes les dépendances nécessaires
+        npm install -g semantic-release@^22.0.0 @semantic-release/changelog@^6.0.0 @semantic-release/git@^10.0.0 @semantic-release/github@^9.0.0 @semantic-release/exec@^6.0.0 conventional-changelog-conventionalcommits@^7.0.0
 
     - name: Create semantic-release config
       run: |
