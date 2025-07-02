@@ -50,7 +50,6 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
 
     - name: Import GPG key
       uses: crazy-max/ghaction-import-gpg@v5
