@@ -46,9 +46,21 @@ checksum:
   algorithm: sha256
 
 signs:
+  # Signature GPG requise par le Terraform Registry (fichier SHASUMS)
   - artifacts: checksum
+    cmd: gpg
     args:
-      # Signature GPG requise par le Terraform Registry
+      - "--batch"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+  # Signature GPG des archives binaires (recommandée pour la sécurité)
+  - artifacts: archive
+    cmd: gpg
+    args:
       - "--batch"
       - "--local-user"
       - "{{ .Env.GPG_FINGERPRINT }}"

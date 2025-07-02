@@ -52,6 +52,25 @@ jobs:
       with:
         gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
         passphrase: ${{ secrets.GPG_PASSPHRASE }}
+        git_user_signingkey: true
+        git_commit_gpgsign: true
+        git_tag_gpgsign: true
+
+    - name: Configure GPG for signing
+      run: |
+        echo "📋 Configuration GPG pour la signature des artefacts..."
+        echo "GPG fingerprint: ${{ steps.import_gpg.outputs.fingerprint }}"
+        
+        # Configurer l'environnement GPG
+        export GPG_TTY=$(tty)
+        echo "GPG_TTY=$GPG_TTY" >> $GITHUB_ENV
+        
+        # Tester la signature GPG
+        echo "test" | gpg --armor --detach-sign --local-user ${{ steps.import_gpg.outputs.fingerprint }}
+        echo "✅ Test de signature GPG réussi"
+        
+        # Lister les clés disponibles
+        gpg --list-secret-keys --keyid-format LONG
 
     - name: Verify GPG key
       run: |
@@ -79,6 +98,31 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+        GPG_TTY: ${{ env.GPG_TTY }}
+        # Variables supplémentaires pour debugging
+        GORELEASER_DEBUG: "true"
+
+    - name: Verify GPG signatures
+      run: |
+        echo "🔍 Vérification des signatures PGP générées..."
+        
+        # Chercher les fichiers de signature
+        find dist/ -name "*.sig" -type f | while read sig_file; do
+          echo "📝 Fichier de signature trouvé: $sig_file"
+          
+          # Vérifier la signature
+          original_file="${sig_file%.sig}"
+          if [ -f "$original_file" ]; then
+            echo "✅ Vérification de $original_file avec $sig_file"
+            gpg --verify "$sig_file" "$original_file" || echo "⚠️ Échec de vérification pour $sig_file"
+          else
+            echo "❌ Fichier original non trouvé pour $sig_file"
+          fi
+        done
+        
+        # Lister tous les artefacts créés
+        echo "📦 Artefacts créés:"
+        ls -la dist/
 
     - name: Upload artifacts to job outputs
       id: release
