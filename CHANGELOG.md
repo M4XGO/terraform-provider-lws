@@ -11,6 +11,22 @@
 
 ### Bug Fixes
 
+* add newlines at the end of multiple files ([230b521](https://github.com/M4XGO/terraform-provider-lws/commit/230b5213b9704e8f1c88cdee35de8511f79dc67d))
+* update GPG signing configuration in .goreleaser.yml ([353767a](https://github.com/M4XGO/terraform-provider-lws/commit/353767a4e3575aba94b41f5b589adcb69d4cec64))
+
+## [2.2.0](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.0...v2.2.0) (2025-07-02)
+
+
+### Features
+
+* add GitHub release configuration to semantic-release workflow ([daf4048](https://github.com/M4XGO/terraform-provider-lws/commit/daf40487fc53dd31913695df2a28e7eddf4630ef))
+* enable complete GPG signing for Terraform Registry compliance ([6a7dd80](https://github.com/M4XGO/terraform-provider-lws/commit/6a7dd800763ee58cb6b6582737bd7212df25135e))
+* enhance GPG signing configuration for artifact security ([80962a1](https://github.com/M4XGO/terraform-provider-lws/commit/80962a1f24fb46bcb304cec12a5a73ffcae31dfc))
+* fix md ([20e721f](https://github.com/M4XGO/terraform-provider-lws/commit/20e721f1901612dbefbbcf23df58c4b34d7dcc92))
+
+
+### Bug Fixes
+
 * update GPG signing configuration in .goreleaser.yml ([353767a](https://github.com/M4XGO/terraform-provider-lws/commit/353767a4e3575aba94b41f5b589adcb69d4cec64))
 
 ## [2.2.0](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.0...v2.2.0) (2025-07-02)
