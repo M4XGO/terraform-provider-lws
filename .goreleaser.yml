@@ -47,7 +47,8 @@ checksum:
 
 signs:
   # Signature GPG requise par le Terraform Registry (fichier SHASUMS)
-  - artifacts: checksum
+  - id: checksum_signature
+    artifacts: checksum
     cmd: gpg
     args:
       - "--batch"
@@ -58,7 +59,8 @@ signs:
       - "--detach-sign"
       - "${artifact}"
   # Signature GPG des archives binaires (recommandée pour la sécurité)
-  - artifacts: archive
+  - id: archive_signature  
+    artifacts: archive
     cmd: gpg
     args:
       - "--batch"
