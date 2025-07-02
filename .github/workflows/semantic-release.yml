@@ -98,6 +98,14 @@ jobs:
               }
             ],
             [
+              "@semantic-release/github",
+              {
+                "assets": [],
+                "releasedLabels": false,
+                "addReleases": "bottom"
+              }
+            ],
+            [
               "@semantic-release/git",
               {
                 "assets": ["CHANGELOG.md"],
