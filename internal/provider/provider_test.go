@@ -34,3 +34,4 @@ func TestLWSProvider_Metadata(t *testing.T) {
 		t.Errorf("Expected Version to be '1.0.0', got %s", resp.Version)
 	}
 }
+ 

@@ -334,3 +334,4 @@ func TestLWSClient_Authentication(t *testing.T) {
 		t.Errorf("Expected error with incorrect credentials, got success")
 	}
 }
+ 
