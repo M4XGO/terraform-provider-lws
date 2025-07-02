@@ -70,27 +70,10 @@ jobs:
         git config --global tag.gpgsign true
         echo "✅ Git configured with GPG signing"
 
-    - name: Create package.json for caching
-      run: |
-        cat > package.json << 'EOF'
-        {
-          "name": "terraform-provider-lws-release",
-          "private": true,
-          "devDependencies": {
-            "semantic-release": "^22.0.0",
-            "@semantic-release/changelog": "^6.0.0",
-            "@semantic-release/git": "^10.0.0",
-            "@semantic-release/github": "^9.0.0",
-            "@semantic-release/exec": "^6.0.0"
-          }
-        }
-        EOF
-
     - name: Install semantic-release dependencies
       run: |
-        npm ci --only=dev
-        # Fallback vers installation globale si le cache échoue
-        npm list semantic-release || npm install -g semantic-release @semantic-release/changelog @semantic-release/git @semantic-release/github @semantic-release/exec
+        # Installation globale optimisée avec versions spécifiques
+        npm install -g semantic-release@^22.0.0 @semantic-release/changelog@^6.0.0 @semantic-release/git@^10.0.0 @semantic-release/github@^9.0.0 @semantic-release/exec@^6.0.0
 
     - name: Create semantic-release config
       run: |
@@ -149,14 +132,8 @@ jobs:
     - name: Run semantic-release
       id: semantic
       run: |
-        # Optimisation : utiliser semantic-release local si disponible
-        if [ -f "node_modules/.bin/semantic-release" ]; then
-          echo "Using local semantic-release"
-          npx semantic-release
-        else
-          echo "Fallback to global semantic-release"
-          semantic-release
-        fi
+        # Utiliser semantic-release global installé
+        semantic-release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GIT_AUTHOR_NAME: github-actions[bot]
