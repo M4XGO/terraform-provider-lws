@@ -16,6 +16,7 @@
 * correct string interpolation in semantic-release configuration ([cb509a5](https://github.com/M4XGO/terraform-provider-lws/commit/cb509a52f6061ba3317b065b7323830bcf8c1d54))
 * remove trailing whitespace to resolve gci formatting errors ([2187f09](https://github.com/M4XGO/terraform-provider-lws/commit/2187f09432700522b411135a56c9a466fbb09f40))
 * reorder conditions in semantic-release workflow for clarity ([6a97942](https://github.com/M4XGO/terraform-provider-lws/commit/6a979429b009dda749b5c9827e544ae90a7592e5))
+* semantic-release-workflow ([aa316da](https://github.com/M4XGO/terraform-provider-lws/commit/aa316daa969b5445742edfe763371e336b72760c))
 * semantic-release-workflow ([e193a59](https://github.com/M4XGO/terraform-provider-lws/commit/e193a59068f6f53a58f377724bc969ef1ca8c6ff))
 * semantic-release-workflow ([47a1079](https://github.com/M4XGO/terraform-provider-lws/commit/47a1079701da27ff4f6932811c4802cc3e5e474b))
 * semantic-release-workflow ([1148402](https://github.com/M4XGO/terraform-provider-lws/commit/114840213e26b72e1c55b7a05164791c0b21d57e))
