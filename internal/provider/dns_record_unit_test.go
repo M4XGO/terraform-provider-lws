@@ -201,7 +201,7 @@ func TestDNSRecordResourceModel_Validation(t *testing.T) {
 }
 
 func TestDNSRecordTypes_Validation(t *testing.T) {
-	validTypes := []string{"A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "SRV", "PTR"}
+	validTypes := []string{"A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "SRV", "PTR", "SPF", "CAA"}
 
 	for _, recordType := range validTypes {
 		t.Run("valid_type_"+recordType, func(t *testing.T) {
@@ -256,6 +256,17 @@ func TestDNSRecord_ValueValidation(t *testing.T) {
 		{"TXT", "v=spf1 include:_spf.google.com ~all", true},
 		{"TXT", "any text is valid", true},
 		{"TXT", "", true}, // Empty TXT is valid
+
+		// SPF record validation
+		{"SPF", "v=spf1 include:_spf.google.com ~all", true},
+		{"SPF", "v=spf1 a mx ~all", true},
+		{"SPF", "", false}, // Empty SPF should not be valid
+
+		// CAA record validation
+		{"CAA", "0 issue letsencrypt.org", true},
+		{"CAA", "0 issuewild ;", true},
+		{"CAA", "128 iodef mailto:admin@example.com", true},
+		{"CAA", "", false}, // Empty CAA should not be valid
 	}
 
 	for _, tt := range tests {
@@ -276,29 +287,48 @@ func TestDNSRecord_TTL_Validation(t *testing.T) {
 		ttl   int64
 		valid bool
 	}{
-		{60, true},          // 1 minute
-		{300, true},         // 5 minutes
-		{3600, true},        // 1 hour (default)
-		{86400, true},       // 1 day
-		{604800, true},      // 1 week
-		{0, false},          // Too low
-		{-1, false},         // Negative
-		{2147483648, false}, // Too high (over 32-bit int)
+		// Valid LWS TTL values
+		{900, true},   // 15 minutes
+		{1800, true},  // 30 minutes
+		{3600, true},  // 1 hour (default)
+		{7200, true},  // 2 hours
+		{21600, true}, // 6 hours
+		{43200, true}, // 12 hours
+		{86400, true}, // 1 day
+		// Invalid TTL values
+		{60, false},     // Too low
+		{300, false},    // Not in LWS list
+		{1200, false},   // Not in LWS list
+		{604800, false}, // Too high
+		{0, false},      // Too low
+		{-1, false},     // Negative
+	}
+
+	// Valid LWS TTL values according to specification
+	validLWSTTLs := map[int64]bool{
+		900:   true,
+		1800:  true,
+		3600:  true,
+		7200:  true,
+		21600: true,
+		43200: true,
+		86400: true,
 	}
 
 	for _, tt := range tests {
 		t.Run("ttl_validation", func(t *testing.T) {
-			if tt.valid {
-				if tt.ttl <= 0 {
-					t.Errorf("TTL %d should be positive", tt.ttl)
-				}
-				if tt.ttl > 2147483647 {
-					t.Errorf("TTL %d should not exceed 32-bit int max", tt.ttl)
-				}
-			} else {
-				if tt.ttl > 0 && tt.ttl <= 2147483647 {
-					t.Errorf("TTL %d was marked as invalid but seems valid", tt.ttl)
-				}
+			isValidLWSTTL := validLWSTTLs[tt.ttl]
+
+			if tt.valid && !isValidLWSTTL {
+				t.Errorf("TTL %d was marked as valid but is not in LWS allowed values", tt.ttl)
+			}
+
+			if !tt.valid && isValidLWSTTL {
+				t.Errorf("TTL %d was marked as invalid but is in LWS allowed values", tt.ttl)
+			}
+
+			if tt.valid && tt.ttl <= 0 {
+				t.Errorf("TTL %d should be positive", tt.ttl)
 			}
 		})
 	}

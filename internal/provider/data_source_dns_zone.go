@@ -36,7 +36,6 @@ type DNSRecordDataModel struct {
 	Type  types.String `tfsdk:"type"`
 	Value types.String `tfsdk:"value"`
 	TTL   types.Int64  `tfsdk:"ttl"`
-	Zone  types.String `tfsdk:"zone"`
 }
 
 func (d *DNSZoneDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -76,10 +75,6 @@ func (d *DNSZoneDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 						},
 						"ttl": schema.Int64Attribute{
 							MarkdownDescription: "DNS record TTL",
-							Computed:            true,
-						},
-						"zone": schema.StringAttribute{
-							MarkdownDescription: "DNS zone name",
 							Computed:            true,
 						},
 					},
@@ -135,7 +130,6 @@ func (d *DNSZoneDataSource) Read(ctx context.Context, req datasource.ReadRequest
 			Type:  types.StringValue(record.Type),
 			Value: types.StringValue(record.Value),
 			TTL:   types.Int64Value(int64(record.TTL)),
-			Zone:  types.StringValue(record.Zone),
 		}
 	}
 
