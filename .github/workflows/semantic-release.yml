@@ -92,6 +92,7 @@ jobs:
           "dryRun": false,
           "ci": true,
           "repositoryUrl": "https://github.com/${{ github.repository }}.git",
+          "tagFormat": "",
           "plugins": [
             [
               "@semantic-release/commit-analyzer",
@@ -122,8 +123,7 @@ jobs:
               "@semantic-release/git",
               {
                 "assets": ["CHANGELOG.md", "go.mod", "go.sum"],
-                "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}",
-                "gitTag": false
+                "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
               }
             ]
           ]
