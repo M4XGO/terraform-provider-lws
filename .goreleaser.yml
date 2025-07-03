@@ -1,5 +1,6 @@
 # Configuration GoReleaser pour le Terraform Registry
 # Documentation: https://goreleaser.com
+version: 2
 
 before:
   hooks:
