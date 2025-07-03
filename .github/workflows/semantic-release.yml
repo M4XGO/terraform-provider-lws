@@ -1,59 +1,27 @@
-name: Release Provider
-
+name: release
 on:
   push:
     tags:
-      - "v*.*.*"
-
-permissions:
-  contents: write
-  id-token: write
-
+      - "v*"
 jobs:
-  release:
-    name: Build and sign release
+  goreleaser:
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        goos: [linux, darwin, windows]
-        goarch: [amd64, arm64]
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v3
         with:
-          go-version: 1.22
-
-      - name: Import GPG key
-        run: |
-          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
-          gpg --list-keys
-        env:
-          GPG_TTY: ${{ runner.tty }}
-
-      - name: Build provider
-        run: |
-          mkdir -p dist
-          export BIN=terraform-provider-<name>_${{ github.ref_name }}_${{ matrix.goos }}_${{ matrix.goarch }}
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o dist/$BIN
-
-      - name: Create SHA256 + sign
-        run: |
-          cd dist
-          export BIN=terraform-provider-<name>_${{ github.ref_name }}_${{ matrix.goos }}_${{ matrix.goarch }}
-          sha256sum $BIN > $BIN.SHA256SUM
-          gpg --batch --yes --armor --output $BIN.SHA256SUM.sig --sign $BIN.SHA256SUM
-
-      - name: Upload release assets
-        uses: softprops/action-gh-release@v2
+          fetch-depth: 0
+      - uses: actions/setup-go@v3
         with:
-          files: |
-            dist/terraform-provider-<name>_${{ github.ref_name }}_${{ matrix.goos }}_${{ matrix.goarch }}
-            dist/terraform-provider-<name>_${{ github.ref_name }}_${{ matrix.goos }}_${{ matrix.goarch }}.SHA256SUM
-            dist/terraform-provider-<name>_${{ github.ref_name }}_${{ matrix.goos }}_${{ matrix.goarch }}.SHA256SUM.sig
+          go-version: '1.22'
+      - uses: crazy-max/ghaction-import-gpg@v5
+        id: import_gpg
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+      - uses: goreleaser/goreleaser-action@v3
+        with:
+          args: release --clean
+          version: latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
