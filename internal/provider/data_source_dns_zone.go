@@ -114,12 +114,41 @@ func (d *DNSZoneDataSource) Read(ctx context.Context, req datasource.ReadRequest
 		return
 	}
 
+	zoneName := data.Name.ValueString()
+	tflog.Info(ctx, "Reading DNS zone", map[string]interface{}{
+		"zone_name": zoneName,
+		"base_url":  d.client.BaseURL,
+		"login":     d.client.Login,
+		"test_mode": d.client.TestMode,
+	})
+
 	// Get DNS zone information from LWS API
-	zone, err := d.client.GetDNSZone(ctx, data.Name.ValueString())
+	zone, err := d.client.GetDNSZone(ctx, zoneName)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read DNS zone, got error: %s", err))
+		tflog.Error(ctx, "Failed to read DNS zone", map[string]interface{}{
+			"zone_name": zoneName,
+			"error":     err.Error(),
+			"base_url":  d.client.BaseURL,
+			"login":     d.client.Login,
+		})
+
+		// Provide more helpful error message
+		errorMsg := fmt.Sprintf("Unable to read DNS zone '%s', got error: %s", zoneName, err)
+		if d.client.TestMode {
+			errorMsg += "\n\nNote: You're in test mode. Make sure your test server is configured correctly."
+		} else {
+			errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/v1/domain/%s/zdns",
+				d.client.BaseURL, d.client.Login, d.client.BaseURL, zoneName)
+		}
+
+		resp.Diagnostics.AddError("Client Error", errorMsg)
 		return
 	}
+
+	tflog.Debug(ctx, "Successfully retrieved DNS zone", map[string]interface{}{
+		"zone_name":    zoneName,
+		"record_count": len(zone.Records),
+	})
 
 	// Convert DNS records to data model
 	records := make([]DNSRecordDataModel, len(zone.Records))

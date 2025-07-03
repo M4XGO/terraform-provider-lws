@@ -129,11 +129,41 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 		record.TTL = int(data.TTL.ValueInt64())
 	}
 
+	tflog.Info(ctx, "Creating DNS record", map[string]interface{}{
+		"name":     record.Name,
+		"type":     record.Type,
+		"value":    record.Value,
+		"zone":     record.Zone,
+		"ttl":      record.TTL,
+		"base_url": r.client.BaseURL,
+		"login":    r.client.Login,
+	})
+
 	createdRecord, err := r.client.CreateDNSRecord(ctx, record)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create DNS record, got error: %s", err))
+		tflog.Error(ctx, "Failed to create DNS record", map[string]interface{}{
+			"name":     record.Name,
+			"type":     record.Type,
+			"zone":     record.Zone,
+			"error":    err.Error(),
+			"base_url": r.client.BaseURL,
+		})
+
+		errorMsg := fmt.Sprintf("Unable to create DNS record '%s' in zone '%s', got error: %s",
+			record.Name, record.Zone, err)
+		errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/v1/domain/%s/zdns",
+			r.client.BaseURL, r.client.Login, r.client.BaseURL, record.Zone)
+
+		resp.Diagnostics.AddError("Client Error", errorMsg)
 		return
 	}
+
+	tflog.Debug(ctx, "Successfully created DNS record", map[string]interface{}{
+		"id":   createdRecord.ID,
+		"name": createdRecord.Name,
+		"type": createdRecord.Type,
+		"zone": createdRecord.Zone,
+	})
 
 	// Save created record data into Terraform state
 	data.ID = types.StringValue(fmt.Sprintf("%d", createdRecord.ID))
@@ -157,12 +187,42 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
+	recordID := data.ID.ValueString()
+	zoneName := data.Zone.ValueString()
+
+	tflog.Info(ctx, "Reading DNS record", map[string]interface{}{
+		"record_id": recordID,
+		"zone":      zoneName,
+		"base_url":  r.client.BaseURL,
+		"login":     r.client.Login,
+	})
+
 	// Get refreshed record value from LWS
-	record, err := r.client.GetDNSRecord(ctx, data.Zone.ValueString(), data.ID.ValueString())
+	record, err := r.client.GetDNSRecord(ctx, zoneName, recordID)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read DNS record, got error: %s", err))
+		tflog.Error(ctx, "Failed to read DNS record", map[string]interface{}{
+			"record_id": recordID,
+			"zone":      zoneName,
+			"error":     err.Error(),
+			"base_url":  r.client.BaseURL,
+		})
+
+		errorMsg := fmt.Sprintf("Unable to read DNS record ID '%s' in zone '%s', got error: %s",
+			recordID, zoneName, err)
+		errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/v1/domain/%s/zdns",
+			r.client.BaseURL, r.client.Login, r.client.BaseURL, zoneName)
+
+		resp.Diagnostics.AddError("Client Error", errorMsg)
 		return
 	}
+
+	tflog.Debug(ctx, "Successfully read DNS record", map[string]interface{}{
+		"record_id": recordID,
+		"name":      record.Name,
+		"type":      record.Type,
+		"value":     record.Value,
+		"zone":      record.Zone,
+	})
 
 	// Update the model with refreshed data
 	data.Name = types.StringValue(record.Name)

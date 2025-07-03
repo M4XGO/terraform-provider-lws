@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -76,11 +77,13 @@ func NewLWSClient(login, apiKey, baseURL string, testMode bool) *LWSClient {
 // makeRequest makes an HTTP request to the LWS API
 func (c *LWSClient) makeRequest(ctx context.Context, method, endpoint string, body interface{}) (*LWSAPIResponse, error) {
 	var reqBody io.Reader
+	var reqBodyBytes []byte
 	if body != nil {
 		jsonData, err := json.Marshal(body)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling request body: %w", err)
 		}
+		reqBodyBytes = jsonData
 		reqBody = bytes.NewBuffer(jsonData)
 	}
 
@@ -100,30 +103,43 @@ func (c *LWSClient) makeRequest(ctx context.Context, method, endpoint string, bo
 		req.Header.Set("X-Test-Mode", "true")
 	}
 
+	// Debug logging - log the request details
+	log.Printf("[DEBUG] LWS API Request: %s %s", method, url)
+	log.Printf("[DEBUG] Headers: X-Auth-Login=%s, X-Auth-Pass=[REDACTED], X-Test-Mode=%s",
+		c.Login, req.Header.Get("X-Test-Mode"))
+	if reqBodyBytes != nil {
+		log.Printf("[DEBUG] Request Body: %s", string(reqBodyBytes))
+	}
+
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("error making request: %w", err)
+		return nil, fmt.Errorf("error making HTTP request to %s: %w", url, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %w", err)
+		return nil, fmt.Errorf("error reading response body from %s: %w", url, err)
 	}
+
+	// Debug logging - log the response details
+	log.Printf("[DEBUG] LWS API Response: Status %d (%s)", resp.StatusCode, resp.Status)
+	log.Printf("[DEBUG] Response Headers: %v", resp.Header)
+	log.Printf("[DEBUG] Response Body: %q", string(responseBody))
 
 	// Check if response is empty
 	if len(responseBody) == 0 {
-		return nil, fmt.Errorf("API returned empty response (status %d)", resp.StatusCode)
+		return nil, fmt.Errorf("API returned empty response (status %d) for URL: %s. This usually means the endpoint doesn't exist or authentication failed", resp.StatusCode, url)
 	}
 
 	var apiResp LWSAPIResponse
 	if err := json.Unmarshal(responseBody, &apiResp); err != nil {
-		return nil, fmt.Errorf("error unmarshaling response (body: %q): %w", string(responseBody), err)
+		return nil, fmt.Errorf("error unmarshaling response from %s (status %d, body: %q): %w", url, resp.StatusCode, string(responseBody), err)
 	}
 
 	// LWS API uses code 200 for success, other codes for errors
 	if resp.StatusCode >= 400 || apiResp.Code != 200 {
-		return &apiResp, fmt.Errorf("API error (status %d): %s", resp.StatusCode, apiResp.Info)
+		return &apiResp, fmt.Errorf("API error for %s (HTTP %d): Code=%d, Info=%s", url, resp.StatusCode, apiResp.Code, apiResp.Info)
 	}
 
 	return &apiResp, nil
