@@ -57,5 +57,4 @@ Read-Only:
 - `name` (String) DNS record name
 - `ttl` (Number) DNS record TTL
 - `type` (String) DNS record type
-- `value` (String) DNS record value
-- `zone` (String) DNS zone name 
+- `value` (String) DNS record value 
