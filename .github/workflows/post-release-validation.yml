@@ -54,7 +54,7 @@ jobs:
           required_version = ">= 1.5.0"
           required_providers {
             lws = {
-              source  = "maximenony/lws"
+              source  = "M4XGO/lws"
               version = "${{ steps.version.outputs.version }}"
             }
           }
@@ -206,7 +206,7 @@ jobs:
           required_version = ">= 1.5.0"
           required_providers {
             lws = {
-              source  = "maximenony/lws"
+              source  = "M4XGO/lws"
               version = "~> ${VERSION_NUMBER}"
             }
           }

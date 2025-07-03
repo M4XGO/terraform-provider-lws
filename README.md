@@ -8,7 +8,7 @@ Here's a quick example of how to use this provider:
 terraform {
   required_providers {
     lws = {
-      source  = "maximenony/lws"
+      source  = "M4XGO/lws"
       version = "~> 2.0"
     }
   }
@@ -51,7 +51,7 @@ Un provider Terraform pour gérer les enregistrements DNS chez LWS (hébergeur f
 terraform {
   required_providers {
     lws = {
-      source  = "maximenony/lws"
+      source  = "M4XGO/lws"
       version = "~> 2.0"
     }
   }

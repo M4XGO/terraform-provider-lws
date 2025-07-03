@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     lws = {
-      source  = "maximenony/lws"
+      source  = "M4XGO/lws"
       version = "~> 2.0"
     }
   }

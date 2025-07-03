@@ -2,6 +2,8 @@
 # Documentation: https://goreleaser.com
 version: 2
 
+project_name: terraform-provider-lws
+
 before:
   hooks:
     - go mod tidy
@@ -84,14 +86,14 @@ release:
     
     ### Installation
     
-    This provider is published to the [Terraform Registry](https://registry.terraform.io/providers/maximenony/lws/latest).
+    This provider is published to the [Terraform Registry](https://registry.terraform.io/providers/M4XGO/lws/latest).
     
     Add to your Terraform configuration:
     ```hcl
     terraform {
       required_providers {
         lws = {
-          source  = "maximenony/lws"
+          source  = "M4XGO/lws"
           version = "~> {{ .Version }}"
         }
       }

@@ -6,7 +6,7 @@ import (
 	"log"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
-	"github.com/maximenony/terraform-provider-lws/internal/provider"
+	"github.com/M4XGO/terraform-provider-lws/internal/provider"
 )
 
 //go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs generate -provider-name lws
@@ -27,7 +27,7 @@ func main() {
 	flag.Parse()
 
 	opts := providerserver.ServeOpts{
-		Address: "registry.terraform.io/maximenony/lws",
+		Address: "registry.terraform.io/M4XGO/lws",
 		Debug:   debug,
 	}
 

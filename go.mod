@@ -1,4 +1,4 @@
-module github.com/maximenony/terraform-provider-lws
+module github.com/M4XGO/terraform-provider-lws
 
 go 1.23.0
 

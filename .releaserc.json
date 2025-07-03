@@ -64,7 +64,7 @@
       "@semantic-release/github",
       {
         "assets": [],
-        "successComment": "🎉 This issue has been resolved in version ${nextRelease.version}. The release is available on [GitHub releases](${releases.url}).\n\n**Terraform Registry**: This provider will be available on the [Terraform Registry](https://registry.terraform.io/providers/maximenony/lws) within 24 hours.",
+        "successComment": "🎉 This issue has been resolved in version ${nextRelease.version}. The release is available on [GitHub releases](${releases.url}).\n\n**Terraform Registry**: This provider will be available on the [Terraform Registry](https://registry.terraform.io/providers/M4XGO/lws) within 24 hours.",
         "failComment": "❌ The release from branch `${branch.name}` had failed due to the following errors:\n- ${errors.map(err => err.message).join('\\n- ')}",
         "releasedLabels": ["released from <%= branch.name %>"],
         "addReleases": "bottom"

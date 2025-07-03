@@ -21,8 +21,8 @@ build:
 # Install the provider locally
 .PHONY: install
 install: build
-	mkdir -p ~/.terraform.d/plugins/registry.terraform.io/maximenony/lws/0.1.0/darwin_amd64
-	cp terraform-provider-lws ~/.terraform.d/plugins/registry.terraform.io/maximenony/lws/0.1.0/darwin_amd64/
+	mkdir -p ~/.terraform.d/plugins/registry.terraform.io/M4XGO/lws/0.1.0/darwin_amd64
+	cp terraform-provider-lws ~/.terraform.d/plugins/registry.terraform.io/M4XGO/lws/0.1.0/darwin_amd64/
 
 # Clean build artifacts
 .PHONY: clean
