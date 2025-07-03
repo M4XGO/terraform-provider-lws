@@ -83,7 +83,7 @@ jobs:
       run: |
         npm install -g conventional-changelog-cli@^4.1.0 conventional-recommended-bump@^7.0.1 conventional-changelog-conventionalcommits@^7.0.2
 
-    - name: Simple release script (fuck semantic-release)
+    - name: Simple release script
       id: semantic
       run: |
         #!/bin/bash
@@ -132,12 +132,17 @@ jobs:
         $(npx conventional-changelog -p conventionalcommits -u)"
         git push origin main
         
+        # Create and push tag for GoReleaser
+        echo "🏷️ Creating tag v$NEW_VERSION..."
+        git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+        git push origin "v$NEW_VERSION"
+        
         # Output for next job
         echo "new_release_published=true" >> $GITHUB_OUTPUT
         echo "new_release_version=$NEW_VERSION" >> $GITHUB_OUTPUT
         echo "new_release_git_tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
         
-        echo "✅ Release $NEW_VERSION prepared!"
+        echo "✅ Release $NEW_VERSION prepared with tag!"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GIT_AUTHOR_NAME: github-actions[bot]
