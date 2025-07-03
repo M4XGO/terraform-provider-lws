@@ -21,12 +21,12 @@ type LWSClient struct {
 
 // DNSRecord represents a DNS record
 type DNSRecord struct {
-	ID    string `json:"id,omitempty"`
+	ID    int    `json:"id,omitempty"`
 	Name  string `json:"name"`
 	Type  string `json:"type"`
 	Value string `json:"value"`
 	TTL   int    `json:"ttl,omitempty"`
-	Zone  string `json:"zone"`
+	Zone  string `json:"zone,omitempty"`
 }
 
 // DNSZone represents a DNS zone
@@ -35,12 +35,11 @@ type DNSZone struct {
 	Records []DNSRecord `json:"records,omitempty"`
 }
 
-// APIResponse represents the standard LWS API response
-type APIResponse struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
+// LWSAPIResponse represents the actual LWS API response format
+type LWSAPIResponse struct {
+	Code int         `json:"code"`
+	Info string      `json:"info"`
+	Data interface{} `json:"data"`
 }
 
 // NewLWSClient creates a new LWS API client
@@ -57,7 +56,7 @@ func NewLWSClient(login, apiKey, baseURL string, testMode bool) *LWSClient {
 }
 
 // makeRequest makes an HTTP request to the LWS API
-func (c *LWSClient) makeRequest(ctx context.Context, method, endpoint string, body interface{}) (*APIResponse, error) {
+func (c *LWSClient) makeRequest(ctx context.Context, method, endpoint string, body interface{}) (*LWSAPIResponse, error) {
 	var reqBody io.Reader
 	if body != nil {
 		jsonData, err := json.Marshal(body)
@@ -94,13 +93,14 @@ func (c *LWSClient) makeRequest(ctx context.Context, method, endpoint string, bo
 		return nil, fmt.Errorf("error reading response body: %w", err)
 	}
 
-	var apiResp APIResponse
+	var apiResp LWSAPIResponse
 	if err := json.Unmarshal(responseBody, &apiResp); err != nil {
 		return nil, fmt.Errorf("error unmarshaling response: %w", err)
 	}
 
-	if resp.StatusCode >= 400 {
-		return &apiResp, fmt.Errorf("API error (status %d): %s", resp.StatusCode, apiResp.Error)
+	// LWS API uses code 200 for success, other codes for errors
+	if resp.StatusCode >= 400 || apiResp.Code != 200 {
+		return &apiResp, fmt.Errorf("API error (status %d): %s", resp.StatusCode, apiResp.Info)
 	}
 
 	return &apiResp, nil
@@ -114,21 +114,27 @@ func (c *LWSClient) GetDNSZone(ctx context.Context, zoneName string) (*DNSZone, 
 		return nil, err
 	}
 
-	if !resp.Success {
-		return nil, fmt.Errorf("API error: %s", resp.Error)
+	if resp.Code != 200 {
+		return nil, fmt.Errorf("API error: %s", resp.Info)
 	}
 
+	// For DNS zone, the data is an array of records
 	dataBytes, err := json.Marshal(resp.Data)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling zone data: %w", err)
 	}
 
-	var zone DNSZone
-	if err := json.Unmarshal(dataBytes, &zone); err != nil {
-		return nil, fmt.Errorf("error unmarshaling zone data: %w", err)
+	var records []DNSRecord
+	if err := json.Unmarshal(dataBytes, &records); err != nil {
+		return nil, fmt.Errorf("error unmarshaling zone records: %w", err)
 	}
 
-	return &zone, nil
+	zone := &DNSZone{
+		Name:    zoneName,
+		Records: records,
+	}
+
+	return zone, nil
 }
 
 // CreateDNSRecord creates a new DNS record
@@ -139,8 +145,8 @@ func (c *LWSClient) CreateDNSRecord(ctx context.Context, record *DNSRecord) (*DN
 		return nil, err
 	}
 
-	if !resp.Success {
-		return nil, fmt.Errorf("API error: %s", resp.Error)
+	if resp.Code != 200 {
+		return nil, fmt.Errorf("API error: %s", resp.Info)
 	}
 
 	dataBytes, err := json.Marshal(resp.Data)
@@ -164,8 +170,8 @@ func (c *LWSClient) GetDNSRecord(ctx context.Context, recordID string) (*DNSReco
 		return nil, err
 	}
 
-	if !resp.Success {
-		return nil, fmt.Errorf("API error: %s", resp.Error)
+	if resp.Code != 200 {
+		return nil, fmt.Errorf("API error: %s", resp.Info)
 	}
 
 	dataBytes, err := json.Marshal(resp.Data)
@@ -183,14 +189,14 @@ func (c *LWSClient) GetDNSRecord(ctx context.Context, recordID string) (*DNSReco
 
 // UpdateDNSRecord updates an existing DNS record
 func (c *LWSClient) UpdateDNSRecord(ctx context.Context, record *DNSRecord) (*DNSRecord, error) {
-	endpoint := fmt.Sprintf("dns/record/%s", record.ID)
+	endpoint := fmt.Sprintf("dns/record/%d", record.ID)
 	resp, err := c.makeRequest(ctx, "PUT", endpoint, record)
 	if err != nil {
 		return nil, err
 	}
 
-	if !resp.Success {
-		return nil, fmt.Errorf("API error: %s", resp.Error)
+	if resp.Code != 200 {
+		return nil, fmt.Errorf("API error: %s", resp.Info)
 	}
 
 	dataBytes, err := json.Marshal(resp.Data)
@@ -214,8 +220,8 @@ func (c *LWSClient) DeleteDNSRecord(ctx context.Context, recordID string) error 
 		return err
 	}
 
-	if !resp.Success {
-		return fmt.Errorf("API error: %s", resp.Error)
+	if resp.Code != 200 {
+		return fmt.Errorf("API error: %s", resp.Info)
 	}
 
 	return nil

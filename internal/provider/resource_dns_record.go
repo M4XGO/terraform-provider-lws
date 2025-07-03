@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -133,9 +134,8 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	// For the purposes of this example code, hardcoding a response value to
-	// save into the Terraform state.
-	data.ID = types.StringValue(createdRecord.ID)
+	// Save created record data into Terraform state
+	data.ID = types.StringValue(fmt.Sprintf("%d", createdRecord.ID))
 	data.TTL = types.Int64Value(int64(createdRecord.TTL))
 
 	// Write logs using the tflog package
@@ -184,9 +184,16 @@ func (r *DNSRecordResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
+	// Convert string ID to int
+	recordID, err := strconv.Atoi(data.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to convert record ID to integer: %s", err))
+		return
+	}
+
 	// Update API call logic
 	record := &DNSRecord{
-		ID:    data.ID.ValueString(),
+		ID:    recordID,
 		Name:  data.Name.ValueString(),
 		Type:  data.Type.ValueString(),
 		Value: data.Value.ValueString(),
