@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/M4XGO/terraform-provider-lws/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -20,7 +21,7 @@ func NewDNSZoneDataSource() datasource.DataSource {
 
 // DNSZoneDataSource defines the data source implementation.
 type DNSZoneDataSource struct {
-	client *LWSClient
+	client *client.LWSClient
 }
 
 // DNSZoneDataSourceModel describes the data source data model.
@@ -94,18 +95,18 @@ func (d *DNSZoneDataSource) Configure(ctx context.Context, req datasource.Config
 		return
 	}
 
-	client, ok := req.ProviderData.(*LWSClient)
+	lwsClient, ok := req.ProviderData.(*client.LWSClient)
 
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *LWSClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *client.LWSClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
 	}
 
-	d.client = client
+	d.client = lwsClient
 }
 
 func (d *DNSZoneDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {

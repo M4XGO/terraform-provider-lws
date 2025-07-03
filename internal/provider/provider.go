@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/M4XGO/terraform-provider-lws/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -151,12 +152,12 @@ func (p *LWSProvider) Configure(ctx context.Context, req provider.ConfigureReque
 	}
 
 	// Create a new LWS client using the configuration values
-	client := NewLWSClient(login, apiKey, baseUrl, testMode)
+	lwsClient := client.NewLWSClient(login, apiKey, baseUrl, testMode)
 
 	// Make the LWS client available during DataSource and Resource
 	// type Configure methods.
-	resp.DataSourceData = client
-	resp.ResourceData = client
+	resp.DataSourceData = lwsClient
+	resp.ResourceData = lwsClient
 }
 
 func (p *LWSProvider) Resources(ctx context.Context) []func() resource.Resource {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/M4XGO/terraform-provider-lws/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -25,7 +26,7 @@ func NewDNSRecordResource() resource.Resource {
 
 // DNSRecordResource defines the resource implementation.
 type DNSRecordResource struct {
-	client *LWSClient
+	client *client.LWSClient
 }
 
 // DNSRecordResourceModel describes the resource data model.
@@ -92,18 +93,18 @@ func (r *DNSRecordResource) Configure(ctx context.Context, req resource.Configur
 		return
 	}
 
-	client, ok := req.ProviderData.(*LWSClient)
+	lwsClient, ok := req.ProviderData.(*client.LWSClient)
 
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *LWSClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *client.LWSClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
 	}
 
-	r.client = client
+	r.client = lwsClient
 }
 
 func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -117,7 +118,7 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 	}
 
 	// Create API call logic
-	record := &DNSRecord{
+	record := &client.DNSRecord{
 		Name:  data.Name.ValueString(),
 		Type:  data.Type.ValueString(),
 		Value: data.Value.ValueString(),
@@ -157,7 +158,7 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 	}
 
 	// Get refreshed record value from LWS
-	record, err := r.client.GetDNSRecord(ctx, data.ID.ValueString())
+	record, err := r.client.GetDNSRecord(ctx, data.Zone.ValueString(), data.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read DNS record, got error: %s", err))
 		return
@@ -192,7 +193,7 @@ func (r *DNSRecordResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	// Update API call logic
-	record := &DNSRecord{
+	record := &client.DNSRecord{
 		ID:    recordID,
 		Name:  data.Name.ValueString(),
 		Type:  data.Type.ValueString(),

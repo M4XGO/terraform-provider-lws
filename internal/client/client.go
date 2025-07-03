@@ -1,4 +1,4 @@
-package provider
+package client
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -40,6 +41,23 @@ type LWSAPIResponse struct {
 	Code int         `json:"code"`
 	Info string      `json:"info"`
 	Data interface{} `json:"data"`
+}
+
+// CreateDNSRecordRequest represents the request body for creating a DNS record
+type CreateDNSRecordRequest struct {
+	Type  string `json:"type"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	TTL   int    `json:"ttl"`
+}
+
+// UpdateDNSRecordRequest represents the request body for updating a DNS record
+type UpdateDNSRecordRequest struct {
+	ID    int    `json:"id"`
+	Type  string `json:"type"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	TTL   int    `json:"ttl"`
 }
 
 // NewLWSClient creates a new LWS API client
@@ -93,11 +111,6 @@ func (c *LWSClient) makeRequest(ctx context.Context, method, endpoint string, bo
 		return nil, fmt.Errorf("error reading response body: %w", err)
 	}
 
-	// Debug logging to see what the API actually returns
-	fmt.Printf("DEBUG: Response Status: %d\n", resp.StatusCode)
-	fmt.Printf("DEBUG: Response Body: %s\n", string(responseBody))
-	fmt.Printf("DEBUG: Content-Type: %s\n", resp.Header.Get("Content-Type"))
-
 	// Check if response is empty
 	if len(responseBody) == 0 {
 		return nil, fmt.Errorf("API returned empty response (status %d)", resp.StatusCode)
@@ -118,7 +131,7 @@ func (c *LWSClient) makeRequest(ctx context.Context, method, endpoint string, bo
 
 // GetDNSZone retrieves DNS zone information
 func (c *LWSClient) GetDNSZone(ctx context.Context, zoneName string) (*DNSZone, error) {
-	endpoint := fmt.Sprintf("dns/zone/%s", zoneName)
+	endpoint := fmt.Sprintf("v1/domain/%s/zdns", zoneName)
 	resp, err := c.makeRequest(ctx, "GET", endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -149,8 +162,17 @@ func (c *LWSClient) GetDNSZone(ctx context.Context, zoneName string) (*DNSZone, 
 
 // CreateDNSRecord creates a new DNS record
 func (c *LWSClient) CreateDNSRecord(ctx context.Context, record *DNSRecord) (*DNSRecord, error) {
-	endpoint := "dns/record"
-	resp, err := c.makeRequest(ctx, "POST", endpoint, record)
+	endpoint := fmt.Sprintf("v1/domain/%s/zdns", record.Zone)
+
+	// Prepare request body (only type, name, value, ttl)
+	reqBody := CreateDNSRecordRequest{
+		Type:  record.Type,
+		Name:  record.Name,
+		Value: record.Value,
+		TTL:   record.TTL,
+	}
+
+	resp, err := c.makeRequest(ctx, "POST", endpoint, reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -169,38 +191,53 @@ func (c *LWSClient) CreateDNSRecord(ctx context.Context, record *DNSRecord) (*DN
 		return nil, fmt.Errorf("error unmarshaling record data: %w", err)
 	}
 
+	// Set the zone since it's not in API response
+	createdRecord.Zone = record.Zone
+
 	return &createdRecord, nil
 }
 
-// GetDNSRecord retrieves a DNS record by ID
-func (c *LWSClient) GetDNSRecord(ctx context.Context, recordID string) (*DNSRecord, error) {
-	endpoint := fmt.Sprintf("dns/record/%s", recordID)
-	resp, err := c.makeRequest(ctx, "GET", endpoint, nil)
+// GetDNSRecord retrieves a DNS record by ID from a specific domain
+func (c *LWSClient) GetDNSRecord(ctx context.Context, domain, recordID string) (*DNSRecord, error) {
+	// Get the entire zone first
+	zone, err := c.GetDNSZone(ctx, domain)
 	if err != nil {
 		return nil, err
 	}
 
-	if resp.Code != 200 {
-		return nil, fmt.Errorf("API error: %s", resp.Info)
+	// Find the record with the matching ID
+	recordIDInt := 0
+	if recordID != "" {
+		if id, err := strconv.Atoi(recordID); err == nil {
+			recordIDInt = id
+		}
 	}
 
-	dataBytes, err := json.Marshal(resp.Data)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling record data: %w", err)
+	for _, record := range zone.Records {
+		if record.ID == recordIDInt {
+			// Set the zone since it's not in API response
+			record.Zone = domain
+			return &record, nil
+		}
 	}
 
-	var record DNSRecord
-	if err := json.Unmarshal(dataBytes, &record); err != nil {
-		return nil, fmt.Errorf("error unmarshaling record data: %w", err)
-	}
-
-	return &record, nil
+	return nil, fmt.Errorf("record with ID %s not found in domain %s", recordID, domain)
 }
 
 // UpdateDNSRecord updates an existing DNS record
 func (c *LWSClient) UpdateDNSRecord(ctx context.Context, record *DNSRecord) (*DNSRecord, error) {
-	endpoint := fmt.Sprintf("dns/record/%d", record.ID)
-	resp, err := c.makeRequest(ctx, "PUT", endpoint, record)
+	endpoint := fmt.Sprintf("v1/domain/%s/zdns", record.Zone)
+
+	// Prepare request body (id, type, name, value, ttl)
+	reqBody := UpdateDNSRecordRequest{
+		ID:    record.ID,
+		Type:  record.Type,
+		Name:  record.Name,
+		Value: record.Value,
+		TTL:   record.TTL,
+	}
+
+	resp, err := c.makeRequest(ctx, "PUT", endpoint, reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -218,6 +255,9 @@ func (c *LWSClient) UpdateDNSRecord(ctx context.Context, record *DNSRecord) (*DN
 	if err := json.Unmarshal(dataBytes, &updatedRecord); err != nil {
 		return nil, fmt.Errorf("error unmarshaling record data: %w", err)
 	}
+
+	// Set the zone since it's not in API response
+	updatedRecord.Zone = record.Zone
 
 	return &updatedRecord, nil
 }

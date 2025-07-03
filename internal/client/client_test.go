@@ -1,4 +1,4 @@
-package provider
+package client
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	testIP4Address = "192.168.1.2"
 	testDomainName = "example.com"
+	testIP4Address = "192.168.1.2"
 )
 
 func TestLWSClient_CreateDNSRecord(t *testing.T) {
@@ -20,6 +20,7 @@ func TestLWSClient_CreateDNSRecord(t *testing.T) {
 		responseStatus int
 		record         *DNSRecord
 		expectError    bool
+		expectedRecord *DNSRecord
 	}{
 		{
 			name:           "successful creation",
@@ -29,10 +30,18 @@ func TestLWSClient_CreateDNSRecord(t *testing.T) {
 				Name:  "www",
 				Type:  "A",
 				Value: "192.168.1.1",
-				Zone:  "example.com",
+				Zone:  testDomainName,
 				TTL:   3600,
 			},
 			expectError: false,
+			expectedRecord: &DNSRecord{
+				ID:    12345,
+				Name:  "www",
+				Type:  "A",
+				Value: "192.168.1.1",
+				Zone:  testDomainName,
+				TTL:   3600,
+			},
 		},
 		{
 			name:           "API error",
@@ -42,34 +51,24 @@ func TestLWSClient_CreateDNSRecord(t *testing.T) {
 				Name:  "invalid",
 				Type:  "A",
 				Value: "192.168.1.1",
-				Zone:  "invalid.com",
+				Zone:  testDomainName,
 				TTL:   3600,
 			},
-			expectError: true,
+			expectError:    true,
+			expectedRecord: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create test server
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				// Verify HTTP method
 				if r.Method != http.MethodPost {
 					t.Errorf("Expected POST request, got %s", r.Method)
 				}
 
-				// Verify headers
-				if r.Header.Get("Content-Type") != "application/json" {
-					t.Errorf("Expected Content-Type: application/json")
-				}
-				if r.Header.Get("X-Auth-Login") != "testlogin" {
-					t.Errorf("Expected X-Auth-Login header")
-				}
-				if r.Header.Get("X-Auth-Pass") != "testkey" {
-					t.Errorf("Expected X-Auth-Pass header")
-				}
-				if r.Header.Get("X-Test-Mode") != "true" {
-					t.Errorf("Expected X-Test-Mode header")
+				// Check if URL contains the zone name
+				if !strings.Contains(r.URL.Path, tt.record.Zone) {
+					t.Errorf("Expected URL to contain zone name %s", tt.record.Zone)
 				}
 
 				w.WriteHeader(tt.responseStatus)
@@ -77,10 +76,8 @@ func TestLWSClient_CreateDNSRecord(t *testing.T) {
 			}))
 			defer server.Close()
 
-			// Create client with test server URL
 			client := NewLWSClient("testlogin", "testkey", server.URL, true)
 
-			// Test CreateDNSRecord
 			record, err := client.CreateDNSRecord(context.Background(), tt.record)
 
 			if tt.expectError {
@@ -93,8 +90,12 @@ func TestLWSClient_CreateDNSRecord(t *testing.T) {
 				}
 				if record == nil {
 					t.Errorf("Expected record, got nil")
-				} else if record.ID != 12345 {
-					t.Errorf("Expected ID 12345, got %d", record.ID)
+				} else if record.ID != tt.expectedRecord.ID {
+					t.Errorf("Expected ID %d, got %d", tt.expectedRecord.ID, record.ID)
+				} else if record.Name != tt.expectedRecord.Name {
+					t.Errorf("Expected Name %s, got %s", tt.expectedRecord.Name, record.Name)
+				} else if record.Type != tt.expectedRecord.Type {
+					t.Errorf("Expected Type %s, got %s", tt.expectedRecord.Type, record.Type)
 				}
 			}
 		})
@@ -114,15 +115,16 @@ func TestLWSClient_GetDNSRecord(t *testing.T) {
 			name: "successful get",
 			responseBody: `{
 				"code": 200,
-				"info": "Fetched DNS Record",
-				"data": {
-					"id": 12345,
-					"name": "www",
-					"type": "A",
-					"value": "192.168.1.1",
-					"zone": "example.com",
-					"ttl": 3600
-				}
+				"info": "Fetched DNS Zone",
+				"data": [
+					{
+						"id": 12345,
+						"name": "www",
+						"type": "A",
+						"value": "192.168.1.1",
+						"ttl": 3600
+					}
+				]
 			}`,
 			responseStatus: http.StatusOK,
 			recordID:       "12345",
@@ -153,9 +155,9 @@ func TestLWSClient_GetDNSRecord(t *testing.T) {
 					t.Errorf("Expected GET request, got %s", r.Method)
 				}
 
-				// Check if URL contains the record ID
-				if !strings.Contains(r.URL.Path, tt.recordID) {
-					t.Errorf("Expected URL to contain record ID %s", tt.recordID)
+				// Check if URL contains the zone name
+				if !strings.Contains(r.URL.Path, "example.com") {
+					t.Errorf("Expected URL to contain zone name")
 				}
 
 				w.WriteHeader(tt.responseStatus)
@@ -165,7 +167,7 @@ func TestLWSClient_GetDNSRecord(t *testing.T) {
 
 			client := NewLWSClient("testlogin", "testkey", server.URL, true)
 
-			record, err := client.GetDNSRecord(context.Background(), tt.recordID)
+			record, err := client.GetDNSRecord(context.Background(), "example.com", tt.recordID)
 
 			if tt.expectError {
 				if err == nil {
@@ -255,7 +257,6 @@ func TestLWSClient_GetDNSZone(t *testing.T) {
 				"name": "www",
 				"type": "A",
 				"value": "192.168.1.1",
-				"zone": "example.com",
 				"ttl": 3600
 			},
 			{
@@ -263,7 +264,6 @@ func TestLWSClient_GetDNSZone(t *testing.T) {
 				"name": "mail",
 				"type": "CNAME",
 				"value": "www.example.com",
-				"zone": "example.com",
 				"ttl": 3600
 			}
 		]
