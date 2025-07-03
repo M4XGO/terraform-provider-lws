@@ -42,7 +42,6 @@ provider "lws" {
 - `test_mode` (Boolean) Enable test mode for LWS API. Defaults to false. Can also be set with the LWS_TEST_MODE environment variable.
 
 ## Authentication
-You need to set your IP address in the LWS control panel to allow the provider to work.
 
 The LWS provider requires authentication credentials to manage DNS records. Configure your credentials using one of the following methods:
 
@@ -57,7 +56,7 @@ export LWS_API_SECRET="your-api-secret"
 
 ```hcl
 provider "lws" {
-  api_key    = "123456"
+  api_key    = "your-api-key"
   api_secret = "your-api-secret"
   # Optional: specify a different API endpoint
   # endpoint = "https://api.lws.fr"
