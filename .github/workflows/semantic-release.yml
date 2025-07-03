@@ -251,16 +251,53 @@ jobs:
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Sync with latest main and tags
+      if: needs.semantic-release.outputs.released == 'true'
+      run: |
+        echo "🔄 Synchronizing with latest main and tags..."
+        git fetch origin main:main --force
+        git fetch origin --tags --force
+        git checkout main
+        git reset --hard origin/main
+        echo "Current commit: $(git rev-parse HEAD)"
+        echo "Latest tags: $(git tag -l | tail -5)"
+        echo "✅ Synchronized with remote"
 
     - name: Extract tag
       id: extract_tag
       run: |
         if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
-          echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          TAG="${{ github.event.inputs.version }}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Using manual version: $TAG"
         elif [ "${{ needs.semantic-release.outputs.released }}" = "true" ]; then
-          echo "tag=${{ needs.semantic-release.outputs.tag }}" >> $GITHUB_OUTPUT
+          TAG="${{ needs.semantic-release.outputs.tag }}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Using semantic-release tag: $TAG"
+          
+          # Verify the tag exists and points to current HEAD
+          echo "🔍 Verifying tag $TAG..."
+          if git tag -l "$TAG" | grep -q "$TAG"; then
+            TAG_COMMIT=$(git rev-list -n 1 "$TAG")
+            HEAD_COMMIT=$(git rev-parse HEAD)
+            echo "Tag commit: $TAG_COMMIT"
+            echo "HEAD commit: $HEAD_COMMIT"
+            if [ "$TAG_COMMIT" = "$HEAD_COMMIT" ]; then
+              echo "✅ Tag $TAG points to current HEAD"
+            else
+              echo "❌ Tag $TAG mismatch! Tag: $TAG_COMMIT, HEAD: $HEAD_COMMIT"
+              exit 1
+            fi
+          else
+            echo "❌ Tag $TAG not found locally!"
+            exit 1
+          fi
         elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Using GitHub ref tag: $TAG"
         else
           echo "❌ Impossible de déterminer le tag"
           exit 1
