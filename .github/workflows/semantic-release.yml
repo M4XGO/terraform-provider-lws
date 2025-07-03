@@ -83,6 +83,7 @@ jobs:
         cat > .releaserc.json << 'EOF'
         {
           "branches": ["main"],
+          "tagFormat": false,
           "repositoryUrl": "https://github.com/${{ github.repository }}.git",
           "plugins": [
             [
@@ -125,8 +126,7 @@ jobs:
               "@semantic-release/git",
               {
                 "assets": ["CHANGELOG.md"],
-                "message": "chore(release): ${nextRelease.version} [skip ci]",
-                "tagMessage": "Release ${nextRelease.version}"
+                "message": "chore(release): ${nextRelease.version} [skip ci]"
               }
             ]
           ]
