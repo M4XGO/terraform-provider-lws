@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -128,7 +129,7 @@ func (d *DNSZoneDataSource) Read(ctx context.Context, req datasource.ReadRequest
 	records := make([]DNSRecordDataModel, len(zone.Records))
 	for i, record := range zone.Records {
 		records[i] = DNSRecordDataModel{
-			ID:    types.StringValue(record.ID),
+			ID:    types.StringValue(strconv.Itoa(record.ID)),
 			Name:  types.StringValue(record.Name),
 			Type:  types.StringValue(record.Type),
 			Value: types.StringValue(record.Value),

@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	testRecordEndpoint = "/dns/record/rec_12345"
+	testRecordEndpoint = "/dns/record/12345"
 )
 
 func TestProvider_CompleteWorkflow(t *testing.T) {
@@ -23,9 +23,10 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 			// Create DNS record
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{
-				"success": true,
+				"code": 200,
+				"info": "Record created",
 				"data": {
-					"id": "rec_12345",
+					"id": 12345,
 					"name": "www",
 					"type": "A",
 					"value": "192.168.1.1",
@@ -38,9 +39,10 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 			// Get DNS record
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{
-				"success": true,
+				"code": 200,
+				"info": "Fetched DNS Record",
 				"data": {
-					"id": "rec_12345",
+					"id": 12345,
 					"name": "www",
 					"type": "A",
 					"value": "192.168.1.1",
@@ -53,9 +55,10 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 			// Update DNS record
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{
-				"success": true,
+				"code": 200,
+				"info": "Record updated",
 				"data": {
-					"id": "rec_12345",
+					"id": 12345,
 					"name": "www",
 					"type": "A",
 					"value": "192.168.1.2",
@@ -68,33 +71,32 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 			// Delete DNS record
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{
-				"success": true,
-				"message": "Record deleted"
+				"code": 200,
+				"info": "Record deleted",
+				"data": null
 			}`))
 
 		case r.URL.Path == "/dns/zone/example.com" && r.Method == http.MethodGet:
 			// Get DNS zone
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{
-				"success": true,
-				"data": {
-					"name": "example.com",
-					"records": [
-						{
-							"id": "rec_12345",
-							"name": "www",
-							"type": "A",
-							"value": "192.168.1.1",
-							"zone": "example.com",
-							"ttl": 3600
-						}
-					]
-				}
+				"code": 200,
+				"info": "Fetched DNS Zone",
+				"data": [
+					{
+						"id": 12345,
+						"name": "www",
+						"type": "A",
+						"value": "192.168.1.1",
+						"zone": "example.com",
+						"ttl": 3600
+					}
+				]
 			}`))
 
 		default:
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"success": false, "error": "Endpoint not found"}`))
+			_, _ = w.Write([]byte(`{"code": 404, "info": "Endpoint not found", "data": null}`))
 		}
 	}))
 	defer server.Close()
@@ -116,12 +118,12 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 		t.Fatalf("Failed to create DNS record: %v", err)
 	}
 
-	if createdRecord.ID != "rec_12345" {
-		t.Errorf("Expected record ID 'rec_12345', got '%s'", createdRecord.ID)
+	if createdRecord.ID != 12345 {
+		t.Errorf("Expected record ID 12345, got %d", createdRecord.ID)
 	}
 
 	// Test 2: Get DNS record
-	fetchedRecord, err := client.GetDNSRecord(context.Background(), "rec_12345")
+	fetchedRecord, err := client.GetDNSRecord(context.Background(), "12345")
 	if err != nil {
 		t.Fatalf("Failed to get DNS record: %v", err)
 	}
@@ -156,7 +158,7 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 	}
 
 	// Test 5: Delete DNS record
-	err = client.DeleteDNSRecord(context.Background(), "rec_12345")
+	err = client.DeleteDNSRecord(context.Background(), "12345")
 	if err != nil {
 		t.Fatalf("Failed to delete DNS record: %v", err)
 	}
@@ -169,21 +171,21 @@ func TestProvider_ErrorHandling(t *testing.T) {
 		case "/dns/record":
 			// Simulate API error
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte(`{"success": false, "error": "Invalid zone name"}`))
+			_, _ = w.Write([]byte(`{"code": 400, "info": "Invalid zone name", "data": null}`))
 
 		case "/dns/record/nonexistent":
 			// Simulate not found
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"success": false, "error": "Record not found"}`))
+			_, _ = w.Write([]byte(`{"code": 404, "info": "Record not found", "data": null}`))
 
 		case "/dns/zone/nonexistent.com":
 			// Simulate zone not found
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"success": false, "error": "Zone not found"}`))
+			_, _ = w.Write([]byte(`{"code": 404, "info": "Zone not found", "data": null}`))
 
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(`{"success": false, "error": "Internal server error"}`))
+			_, _ = w.Write([]byte(`{"code": 500, "info": "Internal server error", "data": null}`))
 		}
 	}))
 	defer server.Close()
@@ -259,10 +261,10 @@ func TestProvider_Authentication(t *testing.T) {
 
 				if login == "validlogin" && apiKey == "validkey" {
 					w.WriteHeader(http.StatusOK)
-					_, _ = w.Write([]byte(`{"success": true, "data": {"id": "test"}}`))
+					_, _ = w.Write([]byte(`{"code": 200, "info": "Record created", "data": {"id": 999}}`))
 				} else {
 					w.WriteHeader(http.StatusUnauthorized)
-					_, _ = w.Write([]byte(`{"success": false, "error": "Unauthorized"}`))
+					_, _ = w.Write([]byte(`{"code": 401, "info": "Unauthorized", "data": null}`))
 				}
 			}))
 			defer server.Close()

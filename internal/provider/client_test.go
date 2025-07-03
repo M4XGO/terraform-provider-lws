@@ -23,7 +23,7 @@ func TestLWSClient_CreateDNSRecord(t *testing.T) {
 	}{
 		{
 			name:           "successful creation",
-			responseBody:   `{"success": true, "data": {"id": "12345", "name": "www", "type": "A", "value": "192.168.1.1", "zone": "example.com", "ttl": 3600}, "message": "Record created"}`,
+			responseBody:   `{"code": 200, "info": "Record created", "data": {"id": 12345, "name": "www", "type": "A", "value": "192.168.1.1", "zone": "example.com", "ttl": 3600}}`,
 			responseStatus: http.StatusOK,
 			record: &DNSRecord{
 				Name:  "www",
@@ -36,7 +36,7 @@ func TestLWSClient_CreateDNSRecord(t *testing.T) {
 		},
 		{
 			name:           "API error",
-			responseBody:   `{"success": false, "error": "Invalid zone"}`,
+			responseBody:   `{"code": 400, "info": "Invalid zone", "data": null}`,
 			responseStatus: http.StatusBadRequest,
 			record: &DNSRecord{
 				Name:  "invalid",
@@ -93,8 +93,8 @@ func TestLWSClient_CreateDNSRecord(t *testing.T) {
 				}
 				if record == nil {
 					t.Errorf("Expected record, got nil")
-				} else if record.ID != "12345" {
-					t.Errorf("Expected ID 12345, got %s", record.ID)
+				} else if record.ID != 12345 {
+					t.Errorf("Expected ID 12345, got %d", record.ID)
 				}
 			}
 		})
@@ -113,9 +113,10 @@ func TestLWSClient_GetDNSRecord(t *testing.T) {
 		{
 			name: "successful get",
 			responseBody: `{
-				"success": true,
+				"code": 200,
+				"info": "Fetched DNS Record",
 				"data": {
-					"id": "12345",
+					"id": 12345,
 					"name": "www",
 					"type": "A",
 					"value": "192.168.1.1",
@@ -127,7 +128,7 @@ func TestLWSClient_GetDNSRecord(t *testing.T) {
 			recordID:       "12345",
 			expectError:    false,
 			expectedRecord: &DNSRecord{
-				ID:    "12345",
+				ID:    12345,
 				Name:  "www",
 				Type:  "A",
 				Value: "192.168.1.1",
@@ -137,7 +138,7 @@ func TestLWSClient_GetDNSRecord(t *testing.T) {
 		},
 		{
 			name:           "record not found",
-			responseBody:   `{"success": false, "error": "Record not found"}`,
+			responseBody:   `{"code": 404, "info": "Record not found", "data": null}`,
 			responseStatus: http.StatusNotFound,
 			recordID:       "nonexistent",
 			expectError:    true,
@@ -178,7 +179,7 @@ func TestLWSClient_GetDNSRecord(t *testing.T) {
 					t.Errorf("Expected record, got nil")
 				} else {
 					if record.ID != tt.expectedRecord.ID {
-						t.Errorf("Expected ID %s, got %s", tt.expectedRecord.ID, record.ID)
+						t.Errorf("Expected ID %d, got %d", tt.expectedRecord.ID, record.ID)
 					}
 					if record.Name != tt.expectedRecord.Name {
 						t.Errorf("Expected Name %s, got %s", tt.expectedRecord.Name, record.Name)
@@ -199,14 +200,14 @@ func TestLWSClient_UpdateDNSRecord(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"success": true, "data": {"id": "12345", "name": "www", "type": "A", "value": "` + testIP4Address + `", "zone": "` + testDomainName + `", "ttl": 3600}, "message": "Record updated"}`))
+		_, _ = w.Write([]byte(`{"code": 200, "info": "Record updated", "data": {"id": 12345, "name": "www", "type": "A", "value": "` + testIP4Address + `", "zone": "` + testDomainName + `", "ttl": 3600}}`))
 	}))
 	defer server.Close()
 
 	client := NewLWSClient("testlogin", "testkey", server.URL, true)
 
 	record := &DNSRecord{
-		ID:    "12345",
+		ID:    12345,
 		Name:  "www",
 		Type:  "A",
 		Value: testIP4Address, // Updated value
@@ -232,7 +233,7 @@ func TestLWSClient_DeleteDNSRecord(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"success": true, "message": "Record deleted"}`))
+		_, _ = w.Write([]byte(`{"code": 200, "info": "Record deleted", "data": null}`))
 	}))
 	defer server.Close()
 
@@ -246,28 +247,26 @@ func TestLWSClient_DeleteDNSRecord(t *testing.T) {
 
 func TestLWSClient_GetDNSZone(t *testing.T) {
 	responseBody := `{
-		"success": true,
-		"data": {
-			"name": "example.com",
-			"records": [
-				{
-					"id": "1",
-					"name": "www",
-					"type": "A",
-					"value": "192.168.1.1",
-					"zone": "example.com",
-					"ttl": 3600
-				},
-				{
-					"id": "2",
-					"name": "mail",
-					"type": "CNAME",
-					"value": "www.example.com",
-					"zone": "example.com",
-					"ttl": 3600
-				}
-			]
-		}
+		"code": 200,
+		"info": "Fetched DNS Zone",
+		"data": [
+			{
+				"id": 1,
+				"name": "www",
+				"type": "A",
+				"value": "192.168.1.1",
+				"zone": "example.com",
+				"ttl": 3600
+			},
+			{
+				"id": 2,
+				"name": "mail",
+				"type": "CNAME",
+				"value": "www.example.com",
+				"zone": "example.com",
+				"ttl": 3600
+			}
+		]
 	}`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -310,12 +309,12 @@ func TestLWSClient_Authentication(t *testing.T) {
 
 		if login != "correctlogin" || apiKey != "correctkey" {
 			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = w.Write([]byte(`{"success": false, "error": "Unauthorized"}`))
+			_, _ = w.Write([]byte(`{"code": 401, "info": "Unauthorized", "data": null}`))
 			return
 		}
 
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"success": true, "data": {"id": "123", "name": "test", "type": "A", "value": "1.1.1.1", "zone": "test.com", "ttl": 3600}}`))
+		_, _ = w.Write([]byte(`{"code": 200, "info": "Record created", "data": {"id": 123, "name": "test", "type": "A", "value": "1.1.1.1", "zone": "test.com", "ttl": 3600}}`))
 	}))
 	defer server.Close()
 
