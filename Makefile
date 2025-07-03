@@ -18,11 +18,29 @@ docs:
 build:
 	go build -o terraform-provider-lws
 
-# Install the provider locally
+# Detect OS and architecture
+OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+ARCH := $(shell uname -m)
+
+# Convert architecture names to Terraform format
+ifeq ($(ARCH),x86_64)
+	ARCH := amd64
+endif
+ifeq ($(ARCH),aarch64)
+	ARCH := arm64
+endif
+
+# Install the provider locally (registry namespace)
 .PHONY: install
 install: build
-	mkdir -p ~/.terraform.d/plugins/registry.terraform.io/M4XGO/lws/0.1.0/darwin_amd64
-	cp terraform-provider-lws ~/.terraform.d/plugins/registry.terraform.io/M4XGO/lws/0.1.0/darwin_amd64/
+	mkdir -p ~/.terraform.d/plugins/registry.terraform.io/M4XGO/lws/0.1.0/$(OS)_$(ARCH)
+	cp terraform-provider-lws ~/.terraform.d/plugins/registry.terraform.io/M4XGO/lws/0.1.0/$(OS)_$(ARCH)/
+
+# Install the provider locally for development (local namespace)
+.PHONY: install-local
+install-local: build
+	mkdir -p ~/.terraform.d/plugins/terraform.local/local/lws/0.0.1/$(OS)_$(ARCH)
+	mv terraform-provider-lws ~/.terraform.d/plugins/terraform.local/local/lws/0.0.1/$(OS)_$(ARCH)/
 
 # Clean build artifacts
 .PHONY: clean
@@ -137,7 +155,8 @@ help:
 	@echo "  lint-fix          - Run linters and auto-fix issues"
 	@echo "  security          - Run security scans"
 	@echo "  fmt               - Format code"
-	@echo "  install           - Install provider locally"
+	@echo "  install           - Install provider locally (registry namespace)"
+	@echo "  install-local     - Install provider locally (local namespace for dev)"
 	@echo "  release-check     - Validate GoReleaser config"
 	@echo "  release-test      - Test release build"
 	@echo "  ci                - Run full CI workflow"
