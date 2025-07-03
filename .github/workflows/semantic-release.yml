@@ -1,475 +1,59 @@
-name: Release Pipeline
+name: Release Provider
 
 on:
   push:
-    branches:
-      - main
     tags:
-      - 'v*'
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version à releaser (ex: v1.0.0)'
-        required: false
-        type: string
-      force_release:
-        description: 'Forcer une release même sans nouveaux commits'
-        required: false
-        default: false
-        type: boolean
+      - "v*.*.*"
 
 permissions:
   contents: write
-  issues: write
-  pull-requests: write
-  packages: write
-
-env:
-  NODE_VERSION: '20'
-  GO_VERSION: '1.22'
-  TERRAFORM_VERSION: '1.6.0'
+  id-token: write
 
 jobs:
-  semantic-release:
+  release:
+    name: Build and sign release
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    timeout-minutes: 15
-    outputs:
-      released: ${{ steps.semantic.outputs.new_release_published }}
-      version: ${{ steps.semantic.outputs.new_release_version }}
-      tag: ${{ steps.semantic.outputs.new_release_git_tag }}
-      gpg_fingerprint: ${{ steps.import_gpg.outputs.fingerprint }}
+
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22
 
-    - name: Import GPG key
-      uses: crazy-max/ghaction-import-gpg@v5
-      id: import_gpg
-      with:
-        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-        passphrase: ${{ secrets.GPG_PASSPHRASE }}
-        git_user_signingkey: true
-        git_commit_gpgsign: true
-        git_tag_gpgsign: true
+      - name: Import GPG key
+        run: |
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+          gpg --list-keys
+        env:
+          GPG_TTY: ${{ runner.tty }}
 
-    - name: Configure Git with GPG
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git config --global user.signingkey ${{ steps.import_gpg.outputs.fingerprint }}
-        git config --global commit.gpgsign true
-        # Configurer les tags pour semantic-release - forcer les tags lightweight
-        git config --global tag.gpgsign false
-        git config --global tag.forceSignAnnotated false
-        git config --global tag.sort version:refname
-        # Configurer un éditeur simple pour éviter les erreurs de terminal
-        git config --global core.editor "echo"
-        # Désactiver les conseils Git qui interfèrent avec CI
-        git config --global advice.pushNonFastForward false
-        git config --global advice.pushUpdateRejected false
-        git config --global advice.detachedHead false
-        echo "✅ Git configured with GPG signing (commits only, lightweight tags with simple editor)"
+      - name: Build provider
+        run: |
+          mkdir -p dist
+          export BIN=terraform-provider-<name>_${{ github.ref_name }}_${{ matrix.goos }}_${{ matrix.goarch }}
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o dist/$BIN
 
-    - name: Install tools
-      run: |
-        npm install -g conventional-changelog-cli@^4.1.0 conventional-recommended-bump@^7.0.1 conventional-changelog-conventionalcommits@^7.0.2
-        # jq is already available on Ubuntu runners
-        which jq || sudo apt-get update && sudo apt-get install -y jq
+      - name: Create SHA256 + sign
+        run: |
+          cd dist
+          export BIN=terraform-provider-<name>_${{ github.ref_name }}_${{ matrix.goos }}_${{ matrix.goarch }}
+          sha256sum $BIN > $BIN.SHA256SUM
+          gpg --batch --yes --armor --output $BIN.SHA256SUM.sig --sign $BIN.SHA256SUM
 
-    - name: Simple release script
-      id: semantic
-      run: |
-        #!/bin/bash
-        set -e
-        
-        echo "🚀 Analysing conventional commits..."
-        
-        # Get the last tag or use v0.0.0 if no tag exists
-        LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-        echo "Last tag: $LAST_TAG"
-        
-        # Remove 'v' prefix for version comparison
-        LAST_VERSION=${LAST_TAG#v}
-        
-        # Determine version bump based on conventional commits since last tag
-        echo "Analyzing commits since $LAST_TAG..."
-        git log --oneline $LAST_TAG..HEAD
-        
-        BUMP_TYPE=$(npx conventional-recommended-bump -p conventionalcommits --tag-prefix="v")
-        echo "Recommended bump: $BUMP_TYPE"
-        
-        # If no bump needed, check if there are any commits since last tag
-        if [ "$BUMP_TYPE" = "" ] || [ "$BUMP_TYPE" = "null" ]; then
-          COMMIT_COUNT=$(git rev-list --count $LAST_TAG..HEAD)
-          if [ "$COMMIT_COUNT" -eq 0 ]; then
-            echo "No new commits since $LAST_TAG"
-            echo "new_release_published=false" >> $GITHUB_OUTPUT
-            exit 0
-          else
-            echo "Commits found but no conventional commits detected, defaulting to patch"
-            BUMP_TYPE="patch"
-          fi
-        fi
-        
-        if [ "$BUMP_TYPE" = "major" ]; then
-          NEW_VERSION=$(echo $LAST_VERSION | awk -F. '{print ($1+1)".0.0"}')
-        elif [ "$BUMP_TYPE" = "minor" ]; then
-          NEW_VERSION=$(echo $LAST_VERSION | awk -F. '{print $1"."($2+1)".0"}')
-        elif [ "$BUMP_TYPE" = "patch" ]; then
-          NEW_VERSION=$(echo $LAST_VERSION | awk -F. '{print $1"."$2"."($3+1)}')
-        else
-          echo "No release needed"
-          echo "new_release_published=false" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        
-        echo "New version: $NEW_VERSION"
-        
-        # Generate changelog
-        echo "📝 Generating changelog..."
-        npx conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0
-        
-        # Tidy go modules
-        echo "🧹 Tidying Go modules..."
-        go mod tidy
-        
-        # Commit changes
-        echo "💾 Committing changes..."
-        git add CHANGELOG.md go.mod go.sum
-        git commit -m "chore(release): $NEW_VERSION [skip ci]
-
-        $(npx conventional-changelog -p conventionalcommits -u)"
-        git push origin main
-        
-        # Create annotated tag via GitHub API to avoid Git editor issues
-        echo "🏷️ Creating annotated tag v$NEW_VERSION via GitHub API..."
-        CURRENT_COMMIT=$(git rev-parse HEAD)
-        echo "Current commit: $CURRENT_COMMIT"
-        
-        # Step 1: Create the tag object with message
-        echo "Creating tag object..."
-        TAG_RESPONSE=$(curl -s -X POST \
-          -H "Authorization: token $GITHUB_TOKEN" \
-          -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/repos/${{ github.repository }}/git/tags \
-          -d "{
-            \"tag\": \"v$NEW_VERSION\",
-            \"message\": \"Release v$NEW_VERSION\n\nGenerated by semantic-release workflow\",
-            \"object\": \"$CURRENT_COMMIT\",
-            \"type\": \"commit\",
-            \"tagger\": {
-              \"name\": \"github-actions[bot]\",
-              \"email\": \"github-actions[bot]@users.noreply.github.com\",
-              \"date\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
-            }
-          }")
-        
-        TAG_SHA=$(echo "$TAG_RESPONSE" | jq -r '.sha // "null"')
-        if [ "$TAG_SHA" = "null" ]; then
-          echo "❌ Failed to create tag object!"
-          echo "Response: $TAG_RESPONSE"
-          exit 1
-        fi
-        echo "✅ Tag object created with SHA: $TAG_SHA"
-        
-        # Step 2: Create the reference to the tag
-        echo "Creating tag reference..."
-        REF_RESPONSE=$(curl -s -X POST \
-          -H "Authorization: token $GITHUB_TOKEN" \
-          -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/repos/${{ github.repository }}/git/refs \
-          -d "{
-            \"ref\": \"refs/tags/v$NEW_VERSION\",
-            \"sha\": \"$TAG_SHA\"
-          }")
-        
-        echo "✅ Annotated tag v$NEW_VERSION created via API!"
-        
-        # Verify tag was created successfully
-        sleep 3  # Wait for GitHub API propagation
-        echo "🔍 Verifying tag creation..."
-        
-        # Check via GitHub API
-        TAG_EXISTS=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-          "https://api.github.com/repos/${{ github.repository }}/git/refs/tags/v$NEW_VERSION" | \
-          jq -r '.ref // "null"')
-        
-        if [ "$TAG_EXISTS" = "refs/tags/v$NEW_VERSION" ]; then
-          echo "✅ Tag v$NEW_VERSION created successfully via API!"
-        else
-          echo "❌ Tag creation failed!"
-          echo "API response: $TAG_EXISTS"
-          exit 1
-        fi
-        
-        # Fetch the new tag locally
-        git fetch origin "refs/tags/v$NEW_VERSION:refs/tags/v$NEW_VERSION"
-        echo "✅ Tag fetched locally: $(git tag -l v$NEW_VERSION)"
-        
-        # Output for next job
-        echo "new_release_published=true" >> $GITHUB_OUTPUT
-        echo "new_release_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-        echo "new_release_git_tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
-        
-        echo "✅ Release $NEW_VERSION prepared with tag!"
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GIT_AUTHOR_NAME: github-actions[bot]
-        GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
-        GIT_COMMITTER_NAME: github-actions[bot]
-        GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
-
-    - name: Summary
-      if: steps.semantic.outputs.new_release_published == 'true'
-      run: |
-        echo "🎉 New release published!"
-        echo "Version: ${{ steps.semantic.outputs.new_release_version }}"
-        echo "Tag: ${{ steps.semantic.outputs.new_release_git_tag }}"
-
-  goreleaser:
-    runs-on: ubuntu-latest
-    needs: [semantic-release]
-    timeout-minutes: 30
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      startsWith(github.ref, 'refs/tags/v') ||
-      needs.semantic-release.outputs.released == 'true'
-    outputs:
-      upload_url: ${{ steps.release.outputs.upload_url }}
-      tag: ${{ steps.extract_tag.outputs.tag }}
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Sync with latest main and tags
-      if: needs.semantic-release.outputs.released == 'true'
-      run: |
-        echo "🔄 Synchronizing with latest main and tags..."
-        echo "Current branch: $(git branch --show-current)"
-        echo "Current commit before sync: $(git rev-parse HEAD)"
-        
-        # Fetch latest changes and tags
-        git fetch origin --tags --force
-        git fetch origin main --force
-        
-        # Reset to latest main
-        git reset --hard origin/main
-        
-        echo "Current commit after sync: $(git rev-parse HEAD)"
-        echo "Latest tags: $(git tag -l | tail -5)"
-        echo "✅ Synchronized with remote"
-
-    - name: Extract tag
-      id: extract_tag
-      run: |
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
-          TAG="${{ github.event.inputs.version }}"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "Using manual version: $TAG"
-        elif [ "${{ needs.semantic-release.outputs.released }}" = "true" ]; then
-          TAG="${{ needs.semantic-release.outputs.tag }}"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "Using semantic-release tag: $TAG"
-          
-          # Verify the tag exists and points to current HEAD
-          echo "🔍 Verifying tag $TAG..."
-          if git tag -l "$TAG" | grep -q "$TAG"; then
-            TAG_COMMIT=$(git rev-list -n 1 "$TAG")
-            HEAD_COMMIT=$(git rev-parse HEAD)
-            echo "Tag commit: $TAG_COMMIT"
-            echo "HEAD commit: $HEAD_COMMIT"
-            if [ "$TAG_COMMIT" = "$HEAD_COMMIT" ]; then
-              echo "✅ Tag $TAG points to current HEAD"
-            else
-              echo "❌ Tag $TAG mismatch! Tag: $TAG_COMMIT, HEAD: $HEAD_COMMIT"
-              exit 1
-            fi
-          else
-            echo "❌ Tag $TAG not found locally!"
-            exit 1
-          fi
-        elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-          TAG="${GITHUB_REF#refs/tags/}"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "Using GitHub ref tag: $TAG"
-        else
-          echo "❌ Impossible de déterminer le tag"
-          exit 1
-        fi
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{ env.GO_VERSION }}
-        cache: true
-
-    - name: Import GPG key
-      uses: crazy-max/ghaction-import-gpg@v5
-      id: import_gpg
-      with:
-        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-        passphrase: ${{ secrets.GPG_PASSPHRASE }}
-        git_user_signingkey: true
-        git_commit_gpgsign: true
-        git_tag_gpgsign: true
-
-    - name: Configure GPG for signing
-      run: |
-        echo "📋 Configuration GPG pour la signature des artefacts..."
-        echo "GPG fingerprint: ${{ steps.import_gpg.outputs.fingerprint }}"
-        
-        # Configurer l'environnement GPG
-        export GPG_TTY=$(tty)
-        echo "GPG_TTY=$GPG_TTY" >> $GITHUB_ENV
-        
-        # Tester la signature GPG
-        echo "test" | gpg --armor --detach-sign --local-user ${{ steps.import_gpg.outputs.fingerprint }}
-        echo "✅ Test de signature GPG réussi"
-        
-        # Lister les clés disponibles
-        gpg --list-secret-keys --keyid-format LONG
-
-    - name: Run tests
-      run: |
-        go mod download
-        make test
-
-    - name: Check GoReleaser config
-      uses: goreleaser/goreleaser-action@v5
-      with:
-        distribution: goreleaser
-        version: v1.26.2
-        args: check
-
-    - name: Run GoReleaser
-      uses: goreleaser/goreleaser-action@v5
-      with:
-        distribution: goreleaser
-        version: v1.26.2
-        args: release --clean
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
-        GPG_TTY: ${{ env.GPG_TTY }}
-        GORELEASER_DEBUG: "true"
-
-    - name: Verify GPG signatures
-      run: |
-        echo "🔍 Vérification des signatures PGP générées..."
-        
-        # Chercher les fichiers de signature
-        find dist/ -name "*.sig" -type f | while read sig_file; do
-          echo "📝 Fichier de signature trouvé: $sig_file"
-          
-          # Vérifier la signature
-          original_file="${sig_file%.sig}"
-          if [ -f "$original_file" ]; then
-            echo "✅ Vérification de $original_file avec $sig_file"
-            gpg --verify "$sig_file" "$original_file" || echo "⚠️ Échec de vérification pour $sig_file"
-          else
-            echo "❌ Fichier original non trouvé pour $sig_file"
-          fi
-        done
-        
-        # Lister tous les artefacts créés
-        echo "📦 Artefacts créés:"
-        ls -la dist/
-
-    - name: Upload artifacts to job outputs
-      id: release
-      run: |
-        echo "upload_url=https://github.com/${{ github.repository }}/releases/tag/${{ steps.extract_tag.outputs.tag }}" >> $GITHUB_OUTPUT
-
-  create-provider-badge:
-    runs-on: ubuntu-latest
-    needs: [goreleaser]
-    if: always() && needs.goreleaser.result == 'success'
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Update README with badge
-      run: |
-        # Créer ou mettre à jour le badge Terraform Provider
-        BADGE='[![Terraform Provider](https://img.shields.io/badge/terraform-provider-623CE4?style=flat&logo=terraform)](https://registry.terraform.io/providers/maximenony/lws/latest)'
-        REGISTRY_BADGE='[![Terraform Registry](https://img.shields.io/badge/terraform-registry-623CE4?style=flat&logo=terraform)](https://registry.terraform.io/providers/maximenony/lws/latest)'
-        VERSION_BADGE="[![Latest Release](https://img.shields.io/github/v/release/maximenony/terraform-provider-lws?style=flat&logo=github)](https://github.com/maximenony/terraform-provider-lws/releases/latest)"
-        
-        # Ajouter les badges en haut du README s'ils ne sont pas déjà présents
-        if ! grep -q "terraform-provider" README.md; then
-          echo "Ajout des badges au README..."
-          sed -i '1i\\n'"$BADGE"' '"$REGISTRY_BADGE"' '"$VERSION_BADGE"'\n' README.md
-        fi
-
-    - name: Commit badge changes
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add README.md
-        if git diff --staged --quiet; then
-          echo "Aucun changement à committer"
-        else
-          git commit -m "docs: update badges for release ${{ needs.goreleaser.outputs.tag }}"
-          git push
-        fi
-
-  notify-success:
-    runs-on: ubuntu-latest
-    needs: [semantic-release, goreleaser, create-provider-badge]
-    if: always()
-    steps:
-    - name: Extract version without v prefix for documentation
-      id: extract_version
-      run: |
-        TAG="${{ needs.goreleaser.outputs.tag }}"
-        VERSION="${TAG#v}"  # Remove 'v' prefix
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "Using version for documentation: $VERSION"
-
-    - name: Report results
-      run: |
-        echo "## 🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Version:** ${{ needs.goreleaser.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Semantic Release:** ${{ needs.semantic-release.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "**GoReleaser:** ${{ needs.goreleaser.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Go Tests:** Passed in GoReleaser job" >> $GITHUB_STEP_SUMMARY
-        echo "**Badge Update:** ${{ needs.create-provider-badge.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 📦 Artifacts" >> $GITHUB_STEP_SUMMARY
-        echo "- [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.goreleaser.outputs.tag }})" >> $GITHUB_STEP_SUMMARY
-        echo "- [Terraform Registry](https://registry.terraform.io/providers/maximenony/lws/latest)" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 🚀 Usage" >> $GITHUB_STEP_SUMMARY
-        echo '```hcl' >> $GITHUB_STEP_SUMMARY
-        echo 'terraform {' >> $GITHUB_STEP_SUMMARY
-        echo '  required_providers {' >> $GITHUB_STEP_SUMMARY
-        echo '    lws = {' >> $GITHUB_STEP_SUMMARY
-        echo '      source  = "maximenony/lws"' >> $GITHUB_STEP_SUMMARY
-        echo '      version = "${{ steps.extract_version.outputs.version }}"' >> $GITHUB_STEP_SUMMARY
-        echo '    }' >> $GITHUB_STEP_SUMMARY
-        echo '  }' >> $GITHUB_STEP_SUMMARY
-        echo '}' >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        
-        if [ "${{ needs.goreleaser.result }}" = "success" ]; then
-          echo "✅ Release completed successfully!"
-        else
-          echo "❌ Release failed. Check the logs above."
-          exit 1
-        fi 
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/terraform-provider-<name>_${{ github.ref_name }}_${{ matrix.goos }}_${{ matrix.goarch }}
+            dist/terraform-provider-<name>_${{ github.ref_name }}_${{ matrix.goos }}_${{ matrix.goarch }}.SHA256SUM
+            dist/terraform-provider-<name>_${{ github.ref_name }}_${{ matrix.goos }}_${{ matrix.goarch }}.SHA256SUM.sig
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
