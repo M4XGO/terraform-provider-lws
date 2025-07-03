@@ -1,4 +1,11 @@
-## [](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.2...v) (2025-07-03)
+## [](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.3...v) (2025-07-03)
+
+
+### Bug Fixes
+
+* **ci:** use latest commit to create tag and not a new one ([3b8fbf0](https://github.com/M4XGO/terraform-provider-lws/commit/3b8fbf0f2d4701b2daea21f7624936f73fcfa570))
+
+## [2.1.3](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.2...v2.1.3) (2025-07-03)
 
 
 ### Bug Fixes
