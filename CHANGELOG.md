@@ -1,4 +1,11 @@
-## [](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.4...v) (2025-07-03)
+## [](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.5...v) (2025-07-03)
+
+
+### Bug Fixes
+
+* **ci:** remove circular dependency in terraform registry validation ([c917992](https://github.com/M4XGO/terraform-provider-lws/commit/c917992b91f48ad6a7cf144de8f6f818edcb5dba))
+
+## [2.1.5](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.4...v2.1.5) (2025-07-03)
 
 
 ### Bug Fixes
