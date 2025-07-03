@@ -1,0 +1,42 @@
+---
+page_title: "{{.ProviderShortName}} Provider"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.ProviderShortName}} Provider
+
+{{ .Description | trimspace }}
+
+## Example Usage
+
+{{ tffile "examples/provider/provider.tf" }}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Authentication
+
+The LWS provider requires authentication credentials to manage DNS records. Configure your credentials using one of the following methods:
+
+### Environment Variables
+
+```shell
+export LWS_API_KEY="your-api-key"
+export LWS_API_SECRET="your-api-secret"
+```
+
+### Provider Configuration
+
+```hcl
+provider "lws" {
+  api_key    = "your-api-key"
+  api_secret = "your-api-secret"
+  # Optional: specify a different API endpoint
+  # endpoint = "https://api.lws.fr"
+}
+```
+
+## API Documentation
+
+For more information about the LWS API, visit the [official API documentation](https://aide.lws.fr/a/268-api-dns). 

@@ -1,0 +1,22 @@
+version: ""
+
+provider_name: "lws"
+
+rendered_provider_name: "LWS"
+
+rendered_website_dir: "docs"
+
+examples_dir: "examples"
+
+import_dir: "examples/import"
+
+# Validation de la structure des exemples
+validate_examples: true
+
+# Modèles personnalisés
+provider_template_path: "templates/index.md.tmpl"
+resource_template_path: "templates/resources.md.tmpl"
+data_source_template_path: "templates/data-sources.md.tmpl"
+
+# Exclusions
+exclude_subproviders: [] 
