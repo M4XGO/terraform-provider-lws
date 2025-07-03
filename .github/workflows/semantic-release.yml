@@ -70,6 +70,7 @@ jobs:
         # Configurer les tags pour semantic-release
         git config --global tag.gpgsign false
         git config --global tag.forceSignAnnotated false
+        git config --global core.editor true
         echo "✅ Git configured with GPG signing (commits only, tags unsigned)"
 
     - name: Install semantic-release dependencies
