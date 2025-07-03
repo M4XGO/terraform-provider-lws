@@ -89,6 +89,8 @@ jobs:
         cat > .releaserc.json << 'EOF'
         {
           "branches": ["main"],
+          "dryRun": false,
+          "ci": true,
           "repositoryUrl": "https://github.com/${{ github.repository }}.git",
           "plugins": [
             [
@@ -112,27 +114,16 @@ jobs:
             [
               "@semantic-release/exec",
               {
-                "prepareCmd": "echo 'Preparing release ${nextRelease.version}'"
-              }
-            ],
-            [
-              "@semantic-release/github",
-              {
-                "assets": [],
-                "releasedLabels": false,
-                "addReleases": "bottom",
-                "failComment": false,
-                "failTitle": false,
-                "labels": false,
-                "assignees": false
+                "prepareCmd": "echo 'Preparing release ${nextRelease.version}' && go mod tidy",
+                "publishCmd": "echo 'Release ${nextRelease.version} prepared for GoReleaser'"
               }
             ],
             [
               "@semantic-release/git",
               {
-                "assets": ["CHANGELOG.md"],
-                "message": "chore(release): ${nextRelease.version} [skip ci]",
-                "tagMessage": "v${nextRelease.version}"
+                "assets": ["CHANGELOG.md", "go.mod", "go.sum"],
+                "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}",
+                "gitTag": false
               }
             ]
           ]
