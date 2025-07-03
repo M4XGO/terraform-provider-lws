@@ -257,11 +257,17 @@ jobs:
       if: needs.semantic-release.outputs.released == 'true'
       run: |
         echo "🔄 Synchronizing with latest main and tags..."
-        git fetch origin main:main --force
+        echo "Current branch: $(git branch --show-current)"
+        echo "Current commit before sync: $(git rev-parse HEAD)"
+        
+        # Fetch latest changes and tags
         git fetch origin --tags --force
-        git checkout main
+        git fetch origin main --force
+        
+        # Reset to latest main
         git reset --hard origin/main
-        echo "Current commit: $(git rev-parse HEAD)"
+        
+        echo "Current commit after sync: $(git rev-parse HEAD)"
         echo "Latest tags: $(git tag -l | tail -5)"
         echo "✅ Synchronized with remote"
 
