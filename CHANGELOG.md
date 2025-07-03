@@ -1,4 +1,11 @@
-## [](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.0...v) (2025-07-03)
+## [](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.1...v) (2025-07-03)
+
+
+### Bug Fixes
+
+* use bash script to correctly create release tag ([fe53211](https://github.com/M4XGO/terraform-provider-lws/commit/fe532113d4a9d63c4a79ba102f86fcbcbbb8c4ac))
+
+## [2.1.1](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.0...v2.1.1) (2025-07-03)
 
 
 ### Features
