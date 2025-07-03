@@ -95,6 +95,26 @@
 * **ci:** add tagMessage to semantic-release config to resolve tag creation error ([54e17cc](https://github.com/M4XGO/terraform-provider-lws/commit/54e17cc390d8b67a78e27dc163d4f747900a6473))
 * correct string interpolation in semantic-release configuration ([cb509a5](https://github.com/M4XGO/terraform-provider-lws/commit/cb509a52f6061ba3317b065b7323830bcf8c1d54))
 * remove trailing whitespace to resolve gci formatting errors ([2187f09](https://github.com/M4XGO/terraform-provider-lws/commit/2187f09432700522b411135a56c9a466fbb09f40))
+* reorder conditions in semantic-release workflow for clarity ([6a97942](https://github.com/M4XGO/terraform-provider-lws/commit/6a979429b009dda749b5c9827e544ae90a7592e5))
+* update GPG signing configuration in .goreleaser.yml ([353767a](https://github.com/M4XGO/terraform-provider-lws/commit/353767a4e3575aba94b41f5b589adcb69d4cec64))
+
+## [2.2.0](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.0...v2.2.0) (2025-07-03)
+
+
+### Features
+
+* add GitHub release configuration to semantic-release workflow ([daf4048](https://github.com/M4XGO/terraform-provider-lws/commit/daf40487fc53dd31913695df2a28e7eddf4630ef))
+* enable complete GPG signing for Terraform Registry compliance ([6a7dd80](https://github.com/M4XGO/terraform-provider-lws/commit/6a7dd800763ee58cb6b6582737bd7212df25135e))
+* enhance GPG signing configuration for artifact security ([80962a1](https://github.com/M4XGO/terraform-provider-lws/commit/80962a1f24fb46bcb304cec12a5a73ffcae31dfc))
+* fix md ([20e721f](https://github.com/M4XGO/terraform-provider-lws/commit/20e721f1901612dbefbbcf23df58c4b34d7dcc92))
+
+
+### Bug Fixes
+
+* add newlines at the end of multiple files ([230b521](https://github.com/M4XGO/terraform-provider-lws/commit/230b5213b9704e8f1c88cdee35de8511f79dc67d))
+* **ci:** add tagMessage to semantic-release config to resolve tag creation error ([54e17cc](https://github.com/M4XGO/terraform-provider-lws/commit/54e17cc390d8b67a78e27dc163d4f747900a6473))
+* correct string interpolation in semantic-release configuration ([cb509a5](https://github.com/M4XGO/terraform-provider-lws/commit/cb509a52f6061ba3317b065b7323830bcf8c1d54))
+* remove trailing whitespace to resolve gci formatting errors ([2187f09](https://github.com/M4XGO/terraform-provider-lws/commit/2187f09432700522b411135a56c9a466fbb09f40))
 * update GPG signing configuration in .goreleaser.yml ([353767a](https://github.com/M4XGO/terraform-provider-lws/commit/353767a4e3575aba94b41f5b589adcb69d4cec64))
 
 ## [2.2.0](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.0...v2.2.0) (2025-07-02)
