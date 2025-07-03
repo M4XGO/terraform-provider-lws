@@ -409,6 +409,14 @@ jobs:
       with:
         terraform_version: ${{ matrix.terraform-version }}
 
+    - name: Extract version without v prefix
+      id: extract_version
+      run: |
+        TAG="${{ needs.goreleaser.outputs.tag }}"
+        VERSION="${TAG#v}"  # Remove 'v' prefix
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Using version: $VERSION"
+
     - name: Create test Terraform configuration
       run: |
         mkdir -p test-config
@@ -418,7 +426,7 @@ jobs:
           required_providers {
             lws = {
               source  = "maximenony/lws"
-              version = "${{ needs.goreleaser.outputs.tag }}"
+              version = "${{ steps.extract_version.outputs.version }}"
             }
           }
         }
@@ -485,6 +493,14 @@ jobs:
     needs: [semantic-release, goreleaser, validate-terraform-registry, create-provider-badge]
     if: always()
     steps:
+    - name: Extract version without v prefix for documentation
+      id: extract_version
+      run: |
+        TAG="${{ needs.goreleaser.outputs.tag }}"
+        VERSION="${TAG#v}"  # Remove 'v' prefix
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Using version for documentation: $VERSION"
+
     - name: Report results
       run: |
         echo "## 🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
@@ -506,7 +522,7 @@ jobs:
         echo '  required_providers {' >> $GITHUB_STEP_SUMMARY
         echo '    lws = {' >> $GITHUB_STEP_SUMMARY
         echo '      source  = "maximenony/lws"' >> $GITHUB_STEP_SUMMARY
-        echo '      version = "${{ needs.goreleaser.outputs.tag }}"' >> $GITHUB_STEP_SUMMARY
+        echo '      version = "${{ steps.extract_version.outputs.version }}"' >> $GITHUB_STEP_SUMMARY
         echo '    }' >> $GITHUB_STEP_SUMMARY
         echo '  }' >> $GITHUB_STEP_SUMMARY
         echo '}' >> $GITHUB_STEP_SUMMARY
