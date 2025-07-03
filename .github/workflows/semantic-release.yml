@@ -98,9 +98,25 @@ jobs:
         # Remove 'v' prefix for version comparison
         LAST_VERSION=${LAST_TAG#v}
         
-        # Determine version bump based on conventional commits
-        BUMP_TYPE=$(npx conventional-recommended-bump -p conventionalcommits)
+        # Determine version bump based on conventional commits since last tag
+        echo "Analyzing commits since $LAST_TAG..."
+        git log --oneline $LAST_TAG..HEAD
+        
+        BUMP_TYPE=$(npx conventional-recommended-bump -p conventionalcommits --tag-prefix="v")
         echo "Recommended bump: $BUMP_TYPE"
+        
+        # If no bump needed, check if there are any commits since last tag
+        if [ "$BUMP_TYPE" = "" ] || [ "$BUMP_TYPE" = "null" ]; then
+          COMMIT_COUNT=$(git rev-list --count $LAST_TAG..HEAD)
+          if [ "$COMMIT_COUNT" -eq 0 ]; then
+            echo "No new commits since $LAST_TAG"
+            echo "new_release_published=false" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "Commits found but no conventional commits detected, defaulting to patch"
+            BUMP_TYPE="patch"
+          fi
+        fi
         
         if [ "$BUMP_TYPE" = "major" ]; then
           NEW_VERSION=$(echo $LAST_VERSION | awk -F. '{print ($1+1)".0.0"}')
@@ -133,9 +149,17 @@ jobs:
         git push origin main
         
         # Create and push tag for GoReleaser
-        echo "🏷️ Creating tag v$NEW_VERSION..."
-        git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+        echo "🏷️ Creating lightweight tag v$NEW_VERSION..."
+        echo "Current commit: $(git rev-parse HEAD)"
+        git tag "v$NEW_VERSION"
+        echo "Tag created successfully: $(git tag -l v$NEW_VERSION)"
+        echo "Pushing tag to origin..."
         git push origin "v$NEW_VERSION"
+        echo "Tag pushed successfully!"
+        
+        # Verify tag exists
+        echo "All tags: $(git tag -l)"
+        echo "Remote tags: $(git ls-remote --tags origin)"
         
         # Output for next job
         echo "new_release_published=true" >> $GITHUB_OUTPUT
