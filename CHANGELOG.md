@@ -1,4 +1,11 @@
-## [](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.3...v) (2025-07-03)
+## [](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.4...v) (2025-07-03)
+
+
+### Bug Fixes
+
+* **ci:** remove v prefix from version constraints in terraform tests ([b5f8b51](https://github.com/M4XGO/terraform-provider-lws/commit/b5f8b51012542a923c744a277e1cf112c9bf1e35))
+
+## [2.1.4](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.3...v2.1.4) (2025-07-03)
 
 
 ### Bug Fixes
