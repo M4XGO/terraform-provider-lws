@@ -74,7 +74,7 @@
       {
         "assets": ["CHANGELOG.md"],
         "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}",
-        "tagAnnotation": "Release ${nextRelease.version}"
+        "gitTag": false
       }
     ]
   ]
