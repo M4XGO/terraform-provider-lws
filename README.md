@@ -1,5 +1,48 @@
 # Terraform Provider LWS
 
+## Usage
+
+Here's a quick example of how to use this provider:
+
+```hcl
+terraform {
+  required_providers {
+    lws = {
+      source  = "maximenony/lws"
+      version = "~> 2.0"
+    }
+  }
+}
+
+provider "lws" {
+  # Configuration options
+}
+
+# Example DNS zone data source
+data "lws_dns_zone" "example" {
+  zone = "example.com"
+}
+
+# Example DNS record resource
+resource "lws_dns_record" "example" {
+  zone = data.lws_dns_zone.example.zone
+  name = "www"
+  type = "A"
+  content = "192.168.1.1"
+  ttl = 3600
+}
+```
+
+For more examples, see the [examples/](examples/) directory.
+
+## Documentation
+
+Full documentation is available in the [docs/](docs/) directory:
+
+- [Provider Configuration](docs/index.md)
+- [Data Sources](docs/data-sources/)
+- [Resources](docs/resources/)
+
 Un provider Terraform pour gérer les enregistrements DNS chez LWS (hébergeur français).
 
 ## 🚀 Installation Rapide
