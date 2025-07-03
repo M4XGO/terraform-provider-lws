@@ -93,9 +93,19 @@ func (c *LWSClient) makeRequest(ctx context.Context, method, endpoint string, bo
 		return nil, fmt.Errorf("error reading response body: %w", err)
 	}
 
+	// Debug logging to see what the API actually returns
+	fmt.Printf("DEBUG: Response Status: %d\n", resp.StatusCode)
+	fmt.Printf("DEBUG: Response Body: %s\n", string(responseBody))
+	fmt.Printf("DEBUG: Content-Type: %s\n", resp.Header.Get("Content-Type"))
+
+	// Check if response is empty
+	if len(responseBody) == 0 {
+		return nil, fmt.Errorf("API returned empty response (status %d)", resp.StatusCode)
+	}
+
 	var apiResp LWSAPIResponse
 	if err := json.Unmarshal(responseBody, &apiResp); err != nil {
-		return nil, fmt.Errorf("error unmarshaling response: %w", err)
+		return nil, fmt.Errorf("error unmarshaling response (body: %q): %w", string(responseBody), err)
 	}
 
 	// LWS API uses code 200 for success, other codes for errors
