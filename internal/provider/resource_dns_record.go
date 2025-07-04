@@ -166,6 +166,21 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 					"zone":           record.Zone,
 				})
 
+				// Validate that the existing record has a valid ID
+				if existingRecord.ID <= 0 {
+					tflog.Error(ctx, "Found existing record but ID is invalid", map[string]interface{}{
+						"existing_id": existingRecord.ID,
+						"name":        record.Name,
+						"type":        record.Type,
+						"zone":        record.Zone,
+					})
+
+					errorMsg := fmt.Sprintf("Found existing DNS record '%s' of type '%s' but it has invalid ID: %d. Cannot update record with invalid ID.",
+						record.Name, record.Type, existingRecord.ID)
+					resp.Diagnostics.AddError("Invalid Record ID", errorMsg)
+					return
+				}
+
 				// Update existing record instead of creating
 				record.ID = existingRecord.ID
 				updatedRecord, err := r.client.UpdateDNSRecord(ctx, record)
@@ -189,6 +204,21 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 					})
 
 					resp.Diagnostics.AddError("Client Error", errorMsg)
+					return
+				}
+
+				// Validate the updated record ID
+				if updatedRecord.ID <= 0 {
+					tflog.Error(ctx, "Updated record returned invalid ID", map[string]interface{}{
+						"returned_id": updatedRecord.ID,
+						"name":        record.Name,
+						"type":        record.Type,
+						"zone":        record.Zone,
+					})
+
+					errorMsg := fmt.Sprintf("Update operation returned invalid ID: %d for record '%s'. This indicates an API problem.",
+						updatedRecord.ID, record.Name)
+					resp.Diagnostics.AddError("Invalid Updated Record ID", errorMsg)
 					return
 				}
 
@@ -246,6 +276,21 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 		})
 
 		resp.Diagnostics.AddError("Client Error", errorMsg)
+		return
+	}
+
+	// Validate the created record ID
+	if createdRecord.ID <= 0 {
+		tflog.Error(ctx, "Created record returned invalid ID", map[string]interface{}{
+			"returned_id": createdRecord.ID,
+			"name":        record.Name,
+			"type":        record.Type,
+			"zone":        record.Zone,
+		})
+
+		errorMsg := fmt.Sprintf("Create operation returned invalid ID: %d for record '%s'. This indicates an API problem.",
+			createdRecord.ID, record.Name)
+		resp.Diagnostics.AddError("Invalid Created Record ID", errorMsg)
 		return
 	}
 
