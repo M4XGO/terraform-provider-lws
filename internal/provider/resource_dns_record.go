@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/M4XGO/terraform-provider-lws/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -328,15 +329,84 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 
 	recordID := data.ID.ValueString()
 	zoneName := data.Zone.ValueString()
+	recordName := data.Name.ValueString()
+	recordType := data.Type.ValueString()
 
 	tflog.Info(ctx, "Reading DNS record", map[string]interface{}{
 		"record_id": recordID,
 		"zone":      zoneName,
+		"name":      recordName,
+		"type":      recordType,
 		"base_url":  r.client.BaseURL,
 		"login":     r.client.Login,
 	})
 
-	// Get refreshed record value from LWS
+	// Check if ID is invalid (0 or empty)
+	recordIDInt, err := strconv.Atoi(recordID)
+	if err != nil || recordIDInt <= 0 {
+		tflog.Warn(ctx, "Invalid record ID in state, attempting to find record by name/type", map[string]interface{}{
+			"invalid_id": recordID,
+			"zone":       zoneName,
+			"name":       recordName,
+			"type":       recordType,
+		})
+
+		// Try to find the record by name and type in the zone
+		zone, err := r.client.GetDNSZone(ctx, zoneName)
+		if err != nil {
+			tflog.Error(ctx, "Failed to get DNS zone to find record by name/type", map[string]interface{}{
+				"zone":  zoneName,
+				"error": err.Error(),
+			})
+
+			// If we can't get the zone, assume the record is deleted
+			resp.State.RemoveResource(ctx)
+			return
+		}
+
+		// Look for the record by name and type
+		var foundRecord *client.DNSRecord
+		for _, record := range zone.Records {
+			if record.Name == recordName && record.Type == recordType {
+				foundRecord = &record
+				break
+			}
+		}
+
+		if foundRecord == nil {
+			tflog.Info(ctx, "DNS record not found in zone, marking as deleted", map[string]interface{}{
+				"zone": zoneName,
+				"name": recordName,
+				"type": recordType,
+			})
+
+			// Record doesn't exist, remove from state
+			resp.State.RemoveResource(ctx)
+			return
+		}
+
+		tflog.Info(ctx, "Found DNS record by name/type, updating ID in state", map[string]interface{}{
+			"zone":     zoneName,
+			"name":     recordName,
+			"type":     recordType,
+			"found_id": foundRecord.ID,
+			"old_id":   recordID,
+		})
+
+		// Update the model with found record data
+		data.ID = types.StringValue(fmt.Sprintf("%d", foundRecord.ID))
+		data.Name = types.StringValue(foundRecord.Name)
+		data.Type = types.StringValue(foundRecord.Type)
+		data.Value = types.StringValue(foundRecord.Value)
+		data.TTL = types.Int64Value(int64(foundRecord.TTL))
+		data.Zone = types.StringValue(foundRecord.Zone)
+
+		// Save corrected data into Terraform state
+		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+		return
+	}
+
+	// Normal flow: get record by ID
 	record, err := r.client.GetDNSRecord(ctx, zoneName, recordID)
 	if err != nil {
 		tflog.Error(ctx, "Failed to read DNS record", map[string]interface{}{
@@ -345,6 +415,16 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 			"error":     err.Error(),
 			"base_url":  r.client.BaseURL,
 		})
+
+		// Check if it's a "not found" error, in which case we should remove from state
+		if strings.Contains(err.Error(), "not found") {
+			tflog.Info(ctx, "DNS record not found, removing from state", map[string]interface{}{
+				"record_id": recordID,
+				"zone":      zoneName,
+			})
+			resp.State.RemoveResource(ctx)
+			return
+		}
 
 		errorMsg := fmt.Sprintf("Unable to read DNS record ID '%s' in zone '%s', got error: %s",
 			recordID, zoneName, err)
