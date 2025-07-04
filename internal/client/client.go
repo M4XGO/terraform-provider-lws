@@ -37,11 +37,29 @@ type DNSZone struct {
 	Records []DNSRecord `json:"records,omitempty"`
 }
 
-// LWSAPIResponse represents the actual LWS API response format
+// LWSAPIResponse represents the standard API response from LWS
 type LWSAPIResponse struct {
 	Code int         `json:"code"`
-	Info string      `json:"info"`
+	Info interface{} `json:"info"` // Can be string or object
 	Data interface{} `json:"data"`
+}
+
+// GetInfoMessage extracts a readable message from the info field
+func (r *LWSAPIResponse) GetInfoMessage() string {
+	switch v := r.Info.(type) {
+	case string:
+		return v
+	case map[string]interface{}:
+		// Handle object format like {"name": "error message"}
+		for _, value := range v {
+			if str, ok := value.(string); ok {
+				return str
+			}
+		}
+		return fmt.Sprintf("API error (code %d)", r.Code)
+	default:
+		return fmt.Sprintf("API error (code %d)", r.Code)
+	}
 }
 
 // CreateDNSRecordRequest represents the request body for creating a DNS record
@@ -139,7 +157,7 @@ func (c *LWSClient) makeRequest(ctx context.Context, method, endpoint string, bo
 
 	// LWS API uses code 200 for success, other codes for errors
 	if resp.StatusCode >= 400 || apiResp.Code != 200 {
-		return &apiResp, fmt.Errorf("API error for %s (HTTP %d): Code=%d, Info=%s", url, resp.StatusCode, apiResp.Code, apiResp.Info)
+		return &apiResp, fmt.Errorf("API error for %s (HTTP %d): Code=%d, Info=%s", url, resp.StatusCode, apiResp.Code, apiResp.GetInfoMessage())
 	}
 
 	return &apiResp, nil
@@ -154,7 +172,7 @@ func (c *LWSClient) GetDNSZone(ctx context.Context, zoneName string) (*DNSZone, 
 	}
 
 	if resp.Code != 200 {
-		return nil, fmt.Errorf("API error: %s", resp.Info)
+		return nil, fmt.Errorf("API error: %s", resp.GetInfoMessage())
 	}
 
 	// For DNS zone, the data is an array of records
@@ -188,13 +206,24 @@ func (c *LWSClient) CreateDNSRecord(ctx context.Context, record *DNSRecord) (*DN
 		TTL:   record.TTL,
 	}
 
+	// Log detailed request information
+	log.Printf("[DEBUG] Creating DNS record for zone '%s':", record.Zone)
+	log.Printf("[DEBUG] - Endpoint: %s/%s", c.BaseURL, endpoint)
+	log.Printf("[DEBUG] - Record Type: %s", reqBody.Type)
+	log.Printf("[DEBUG] - Record Name: '%s'", reqBody.Name)
+	log.Printf("[DEBUG] - Record Value: %s", reqBody.Value)
+	log.Printf("[DEBUG] - Record TTL: %d", reqBody.TTL)
+	log.Printf("[DEBUG] - Test Mode: %t", c.TestMode)
+
 	resp, err := c.makeRequest(ctx, "POST", endpoint, reqBody)
 	if err != nil {
+		log.Printf("[ERROR] Failed to make request: %v", err)
 		return nil, err
 	}
 
 	if resp.Code != 200 {
-		return nil, fmt.Errorf("API error: %s", resp.Info)
+		log.Printf("[ERROR] API returned error code %d: %s", resp.Code, resp.GetInfoMessage())
+		return nil, fmt.Errorf("API error: %s", resp.GetInfoMessage())
 	}
 
 	dataBytes, err := json.Marshal(resp.Data)
@@ -209,6 +238,8 @@ func (c *LWSClient) CreateDNSRecord(ctx context.Context, record *DNSRecord) (*DN
 
 	// Set the zone since it's not in API response
 	createdRecord.Zone = record.Zone
+
+	log.Printf("[DEBUG] Successfully created record with ID: %d", createdRecord.ID)
 
 	return &createdRecord, nil
 }
@@ -259,7 +290,7 @@ func (c *LWSClient) UpdateDNSRecord(ctx context.Context, record *DNSRecord) (*DN
 	}
 
 	if resp.Code != 200 {
-		return nil, fmt.Errorf("API error: %s", resp.Info)
+		return nil, fmt.Errorf("API error: %s", resp.GetInfoMessage())
 	}
 
 	dataBytes, err := json.Marshal(resp.Data)
@@ -287,7 +318,7 @@ func (c *LWSClient) DeleteDNSRecord(ctx context.Context, recordID string) error 
 	}
 
 	if resp.Code != 200 {
-		return fmt.Errorf("API error: %s", resp.Info)
+		return fmt.Errorf("API error: %s", resp.GetInfoMessage())
 	}
 
 	return nil

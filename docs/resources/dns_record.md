@@ -17,7 +17,7 @@ resource "lws_dns_record" "www" {
   zone    = "example.com"
   name    = "www"
   type    = "A"
-  content = "192.168.1.1"
+  value = "192.168.1.1"
   ttl     = 3600
 }
 
@@ -26,7 +26,7 @@ resource "lws_dns_record" "blog" {
   zone    = "example.com"
   name    = "blog"
   type    = "CNAME"
-  content = "www.example.com"
+  value = "www.example.com"
   ttl     = 3600
 }
 
@@ -35,7 +35,7 @@ resource "lws_dns_record" "mail" {
   zone     = "example.com"
   name     = "@"
   type     = "MX"
-  content  = "10 mail.example.com"
+  value  = "10 mail.example.com"
   ttl      = 3600
 }
 
@@ -44,7 +44,7 @@ resource "lws_dns_record" "verification" {
   zone    = "example.com"
   name    = "@"
   type    = "TXT"
-  content = "v=spf1 include:_spf.google.com ~all"
+  value = "v=spf1 include:_spf.google.com ~all"
   ttl     = 300
 }
 ```

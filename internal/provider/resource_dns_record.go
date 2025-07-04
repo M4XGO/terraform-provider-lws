@@ -129,7 +129,7 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 		record.TTL = int(data.TTL.ValueInt64())
 	}
 
-	tflog.Info(ctx, "Creating DNS record", map[string]interface{}{
+	tflog.Info(ctx, "Processing DNS record request", map[string]interface{}{
 		"name":     record.Name,
 		"type":     record.Type,
 		"value":    record.Value,
@@ -137,6 +137,93 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 		"ttl":      record.TTL,
 		"base_url": r.client.BaseURL,
 		"login":    r.client.Login,
+	})
+
+	// First, check if a record with the same name and type already exists
+	tflog.Debug(ctx, "Checking if DNS record already exists", map[string]interface{}{
+		"name": record.Name,
+		"type": record.Type,
+		"zone": record.Zone,
+	})
+
+	zone, err := r.client.GetDNSZone(ctx, record.Zone)
+	if err != nil {
+		tflog.Error(ctx, "Failed to get DNS zone for conflict check", map[string]interface{}{
+			"zone":  record.Zone,
+			"error": err.Error(),
+		})
+		// If we can't get the zone, continue with create attempt
+	} else {
+		// Look for existing record with same name and type
+		for _, existingRecord := range zone.Records {
+			if existingRecord.Name == record.Name && existingRecord.Type == record.Type {
+				tflog.Info(ctx, "Found existing DNS record, will update instead of create", map[string]interface{}{
+					"existing_id":    existingRecord.ID,
+					"existing_value": existingRecord.Value,
+					"new_value":      record.Value,
+					"name":           record.Name,
+					"type":           record.Type,
+					"zone":           record.Zone,
+				})
+
+				// Update existing record instead of creating
+				record.ID = existingRecord.ID
+				updatedRecord, err := r.client.UpdateDNSRecord(ctx, record)
+				if err != nil {
+					errorMsg := fmt.Sprintf("Unable to update existing DNS record '%s' (ID: %d) in zone '%s', got error: %s",
+						record.Name, existingRecord.ID, record.Zone, err)
+					if r.client.TestMode {
+						errorMsg += "\n\nNote: You're in test mode. Make sure your test server is configured correctly."
+					} else {
+						errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/domain/%s/zdns",
+							r.client.BaseURL, r.client.Login, r.client.BaseURL, record.Zone)
+					}
+
+					tflog.Error(ctx, "Failed to update existing DNS record", map[string]interface{}{
+						"name":        record.Name,
+						"zone":        record.Zone,
+						"type":        record.Type,
+						"value":       record.Value,
+						"existing_id": existingRecord.ID,
+						"error":       err.Error(),
+					})
+
+					resp.Diagnostics.AddError("Client Error", errorMsg)
+					return
+				}
+
+				tflog.Info(ctx, "Successfully updated existing DNS record", map[string]interface{}{
+					"id":        updatedRecord.ID,
+					"name":      updatedRecord.Name,
+					"type":      updatedRecord.Type,
+					"zone":      updatedRecord.Zone,
+					"new_value": updatedRecord.Value,
+					"action":    "updated_existing",
+				})
+
+				// Inform user that we updated an existing record instead of creating
+				resp.Diagnostics.AddWarning(
+					"Updated Existing DNS Record",
+					fmt.Sprintf("Found existing DNS record '%s' of type '%s' in zone '%s' (ID: %d). Updated its value from '%s' to '%s' instead of creating a duplicate.",
+						record.Name, record.Type, record.Zone, existingRecord.ID, existingRecord.Value, record.Value),
+				)
+
+				// Save updated record data into Terraform state
+				data.ID = types.StringValue(fmt.Sprintf("%d", updatedRecord.ID))
+				data.TTL = types.Int64Value(int64(updatedRecord.TTL))
+
+				// Save data into Terraform state
+				resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+				return
+			}
+		}
+	}
+
+	// No existing record found, proceed with creation
+	tflog.Info(ctx, "No existing record found, creating new DNS record", map[string]interface{}{
+		"name": record.Name,
+		"type": record.Type,
+		"zone": record.Zone,
 	})
 
 	createdRecord, err := r.client.CreateDNSRecord(ctx, record)
@@ -162,12 +249,15 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	tflog.Debug(ctx, "Successfully created DNS record", map[string]interface{}{
-		"id":   createdRecord.ID,
-		"name": createdRecord.Name,
-		"type": createdRecord.Type,
-		"zone": createdRecord.Zone,
+	tflog.Info(ctx, "Successfully created new DNS record", map[string]interface{}{
+		"id":     createdRecord.ID,
+		"name":   createdRecord.Name,
+		"type":   createdRecord.Type,
+		"zone":   createdRecord.Zone,
+		"action": "created_new",
 	})
+
+	// Log successful creation (no warning needed for normal operation)
 
 	// Save created record data into Terraform state
 	data.ID = types.StringValue(fmt.Sprintf("%d", createdRecord.ID))
@@ -269,14 +359,57 @@ func (r *DNSRecordResource) Update(ctx context.Context, req resource.UpdateReque
 		record.TTL = int(data.TTL.ValueInt64())
 	}
 
+	tflog.Info(ctx, "Updating DNS record", map[string]interface{}{
+		"record_id": recordID,
+		"name":      record.Name,
+		"type":      record.Type,
+		"value":     record.Value,
+		"zone":      record.Zone,
+		"ttl":       record.TTL,
+		"base_url":  r.client.BaseURL,
+		"login":     r.client.Login,
+	})
+
 	updatedRecord, err := r.client.UpdateDNSRecord(ctx, record)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update DNS record, got error: %s", err))
+		errorMsg := fmt.Sprintf("Unable to update DNS record '%s' (ID: %d) in zone '%s', got error: %s",
+			record.Name, recordID, record.Zone, err)
+		if r.client.TestMode {
+			errorMsg += "\n\nNote: You're in test mode. Make sure your test server is configured correctly."
+		} else {
+			errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/domain/%s/zdns",
+				r.client.BaseURL, r.client.Login, r.client.BaseURL, record.Zone)
+		}
+
+		tflog.Error(ctx, "Failed to update DNS record", map[string]interface{}{
+			"record_id": recordID,
+			"name":      record.Name,
+			"zone":      record.Zone,
+			"type":      record.Type,
+			"value":     record.Value,
+			"error":     err.Error(),
+		})
+
+		resp.Diagnostics.AddError("Client Error", errorMsg)
 		return
 	}
 
-	// Update the model with the updated data
+	tflog.Info(ctx, "Successfully updated DNS record", map[string]interface{}{
+		"record_id": recordID,
+		"name":      updatedRecord.Name,
+		"type":      updatedRecord.Type,
+		"value":     updatedRecord.Value,
+		"zone":      updatedRecord.Zone,
+		"ttl":       updatedRecord.TTL,
+		"action":    "updated",
+	})
+
+	// Update the model with the updated data from API response
+	data.Name = types.StringValue(updatedRecord.Name)
+	data.Type = types.StringValue(updatedRecord.Type)
+	data.Value = types.StringValue(updatedRecord.Value)
 	data.TTL = types.Int64Value(int64(updatedRecord.TTL))
+	data.Zone = types.StringValue(updatedRecord.Zone)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
