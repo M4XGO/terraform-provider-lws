@@ -137,7 +137,7 @@ func (d *DNSZoneDataSource) Read(ctx context.Context, req datasource.ReadRequest
 		if d.client.TestMode {
 			errorMsg += "\n\nNote: You're in test mode. Make sure your test server is configured correctly."
 		} else {
-			errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/v1/domain/%s/zdns",
+			errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/domain/%s/zdns",
 				d.client.BaseURL, d.client.Login, d.client.BaseURL, zoneName)
 		}
 

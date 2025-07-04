@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,74 +15,105 @@ const (
 	testRecordEndpoint = "/dns/record/12345"
 )
 
-func TestProvider_CompleteWorkflow(t *testing.T) {
-	// Create a mock LWS API server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Route based on endpoint
-		switch {
-		case r.URL.Path == "/v1/domain/example.com/zdns" && r.Method == http.MethodPost:
-			// Create DNS record
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{
-				"code": 200,
-				"info": "Record created",
-				"data": {
-					"id": 12345,
-					"name": "www",
-					"type": "A",
-					"value": "192.168.1.1",
-					"ttl": 3600
-				}
-			}`))
+func setupTestServer() *httptest.Server {
+	mux := http.NewServeMux()
 
-		case r.URL.Path == "/v1/domain/example.com/zdns" && r.Method == http.MethodPut:
-			// Update DNS record
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{
-				"code": 200,
-				"info": "Record updated",
-				"data": {
-					"id": 12345,
-					"name": "www",
-					"type": "A",
-					"value": "192.168.1.2",
-					"zone": "example.com",
-					"ttl": 3600
-				}
-			}`))
+	// Handle DNS record creation
+	mux.HandleFunc("/domain/example.com/zdns", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			// Handle POST - Create record
+			var req client.CreateDNSRecordRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "Invalid request body", http.StatusBadRequest)
+				return
+			}
 
-		case r.URL.Path == testRecordEndpoint && r.Method == http.MethodDelete:
-			// Delete DNS record
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{
-				"code": 200,
-				"info": "Record deleted",
-				"data": null
-			}`))
+			// Mock response for created record
+			response := client.LWSAPIResponse{
+				Code: 200,
+				Info: "DNS record created",
+				Data: client.DNSRecord{
+					ID:    1,
+					Name:  req.Name,
+					Type:  req.Type,
+					Value: req.Value,
+					TTL:   req.TTL,
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(response)
 
-		case r.URL.Path == "/v1/domain/example.com/zdns" && r.Method == http.MethodGet:
-			// Get DNS zone
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{
-				"code": 200,
-				"info": "Fetched DNS Zone",
-				"data": [
-					{
-						"id": 12345,
-						"name": "www",
-						"type": "A",
-						"value": "192.168.1.1",
-						"zone": "example.com",
-						"ttl": 3600
-					}
-				]
-			}`))
+		case http.MethodPut:
+			// Handle PUT - Update record
+			var req client.UpdateDNSRecordRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "Invalid request body", http.StatusBadRequest)
+				return
+			}
+
+			// Mock response for updated record
+			response := client.LWSAPIResponse{
+				Code: 200,
+				Info: "DNS record updated",
+				Data: client.DNSRecord{
+					ID:    req.ID,
+					Name:  req.Name,
+					Type:  req.Type,
+					Value: req.Value,
+					TTL:   req.TTL,
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(response)
+
+		case http.MethodGet:
+			// Handle GET - Get zone/records
+			// Mock response with a list of records
+			records := []client.DNSRecord{
+				{
+					ID:    1,
+					Name:  "test",
+					Type:  "A",
+					Value: "192.0.2.1",
+					TTL:   3600,
+				},
+			}
+			response := client.LWSAPIResponse{
+				Code: 200,
+				Info: "Fetched DNS Zone",
+				Data: records,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(response)
 
 		default:
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"code": 404, "info": "Endpoint not found", "data": null}`))
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
-	}))
+	})
+
+	// Handle DNS record deletion
+	mux.HandleFunc("/dns/record/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		response := client.LWSAPIResponse{
+			Code: 200,
+			Info: "DNS record deleted",
+			Data: nil,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	})
+
+	return httptest.NewServer(mux)
+}
+
+func TestProvider_CompleteWorkflow(t *testing.T) {
+	// Create a mock LWS API server
+	server := setupTestServer()
 	defer server.Close()
 
 	// Create LWS client with mock server
@@ -101,18 +133,18 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 		t.Fatalf("Failed to create DNS record: %v", err)
 	}
 
-	if createdRecord.ID != 12345 {
-		t.Errorf("Expected record ID 12345, got %d", createdRecord.ID)
+	if createdRecord.ID != 1 {
+		t.Errorf("Expected record ID 1, got %d", createdRecord.ID)
 	}
 
 	// Test 2: Get DNS record
-	fetchedRecord, err := lwsClient.GetDNSRecord(context.Background(), "example.com", "12345")
+	fetchedRecord, err := lwsClient.GetDNSRecord(context.Background(), "example.com", "1")
 	if err != nil {
 		t.Fatalf("Failed to get DNS record: %v", err)
 	}
 
-	if fetchedRecord.Name != "www" {
-		t.Errorf("Expected record name 'www', got '%s'", fetchedRecord.Name)
+	if fetchedRecord.Name != "test" {
+		t.Errorf("Expected record name 'test', got '%s'", fetchedRecord.Name)
 	}
 
 	// Test 3: Update DNS record
@@ -141,7 +173,7 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 	}
 
 	// Test 5: Delete DNS record
-	err = lwsClient.DeleteDNSRecord(context.Background(), "12345")
+	err = lwsClient.DeleteDNSRecord(context.Background(), "1")
 	if err != nil {
 		t.Fatalf("Failed to delete DNS record: %v", err)
 	}

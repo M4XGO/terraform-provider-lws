@@ -1,106 +1,123 @@
 # Guide de Débogage - Terraform Provider LWS
 
-## Activer le Logging Détaillé
+## Activation du Logging Détaillé
 
-Pour diagnostiquer les erreurs 404 et autres problèmes API, vous pouvez activer plusieurs niveaux de logging :
+Pour déboguer les problèmes avec le provider Terraform LWS, vous pouvez activer le logging détaillé qui montrera les requêtes API et les réponses.
 
-### 1. Logging Terraform (Recommandé)
+### Configuration du Logging
+
+Avant d'exécuter vos commandes Terraform, définissez la variable d'environnement :
 
 ```bash
-# Activer tous les logs de débogage
 export TF_LOG=DEBUG
-terraform plan
+```
 
-# Ou seulement les logs du provider
-export TF_LOG_PROVIDER=DEBUG
-terraform plan
+Ou pour un niveau de détail maximum :
 
-# Logs très détaillés (includes HTTP requests/responses)
+```bash
 export TF_LOG=TRACE
-terraform plan
 ```
 
-### 2. Logs dans un fichier
+### Exemple de Sortie avec DEBUG
 
-```bash
-# Rediriger les logs vers un fichier
-export TF_LOG=DEBUG
-export TF_LOG_PATH=./terraform-debug.log
-terraform plan
-```
-
-### 3. Exemple de sortie avec nos améliorations
-
-Avec le logging activé, vous verrez maintenant :
+Avec `TF_LOG=DEBUG`, vous verrez des logs détaillés comme :
 
 ```
-[INFO]  Reading DNS zone: zone_name=example.com base_url=https://api.lws.net login=votre_login
-[DEBUG] LWS API Request: GET https://api.lws.net/v1/domain/example.com/zdns
-[DEBUG] Headers: X-Auth-Login=votre_login, X-Auth-Pass=[REDACTED], X-Test-Mode=
-[DEBUG] LWS API Response: Status 404 (Not Found)
-[DEBUG] Response Headers: map[Content-Type:[application/json]]
-[DEBUG] Response Body: ""
+[INFO]  LWS API Request: GET https://api.lws.net/v1/domain/example.com/zdns
+Headers: X-Auth-Login=your-login, X-Test-Mode=false
+[DEBUG] Request Body: <empty>
+
+[DEBUG] LWS API Response: status=200, url=https://api.lws.net/v1/domain/example.com/zdns
+Response Body: {"code":200,"info":"Fetched DNS Zone","data":[...]}
+
 [ERROR] Failed to read DNS zone: zone_name=example.com error=API returned empty response (status 404) for URL: https://api.lws.net/v1/domain/example.com/zdns
 ```
 
-### 4. Points de vérification
+### Erreurs Communes et Diagnostics
 
-Avec ces logs, vérifiez :
+#### Erreur 404 (Zone Introuvable)
 
-1. **URL correcte** : L'endpoint appelé correspond-il à votre attente ?
-2. **Authentification** : Les headers X-Auth-Login sont-ils corrects ?
-3. **Domaine** : Le nom de domaine existe-t-il dans votre compte LWS ?
-4. **Base URL** : Utilisez-vous la bonne URL de l'API LWS ?
+Si vous voyez une erreur comme :
+```
+[ERROR] Provider Error: Unable to read DNS zone 'example.com', got error: API returned empty response (status 404)
+```
 
-### 5. Configuration Provider
+**Causes possibles :**
+1. Le nom de domaine n'existe pas dans votre compte LWS
+2. Le domaine n'est pas encore configuré pour les DNS
+3. Les identifiants d'authentification sont incorrects
 
-Assurez-vous que votre configuration provider est correcte :
+**Solutions :**
+1. Vérifiez que le domaine existe dans votre panel LWS
+2. Assurez-vous que les DNS LWS sont activés pour ce domaine
+3. Vérifiez vos identifiants `login` et `api_key`
+
+#### Erreur 401 (Non Autorisé)
+
+Si vous voyez :
+```
+[ERROR] API error: Unauthorized access
+```
+
+**Causes possibles :**
+1. Login incorrect dans la configuration
+2. Clé API incorrecte ou expirée
+3. Permissions insuffisantes pour l'API
+
+**Solutions :**
+1. Vérifiez votre login LWS dans la configuration du provider
+2. Régénérez votre clé API depuis le panel LWS
+3. Contactez le support LWS pour vérifier les permissions
+
+#### Erreur de Connectivité
+
+Si vous voyez des erreurs de timeout ou de connexion :
+```
+[ERROR] Failed to make request: Get "https://api.lws.net/v1/domain/votre-domaine.com/zdns": dial tcp: i/o timeout
+```
+
+**Solutions :**
+1. Vérifiez votre connexion internet
+2. Assurez-vous que l'API LWS n'est pas en maintenance
+3. Vérifiez les règles de pare-feu si vous êtes derrière un proxy
+
+### Configuration d'Exemple pour Tests
+
+Pour tester avec un domaine spécifique :
 
 ```hcl
-provider "lws" {
-  login    = "votre_login"       # ou variable d'environnement LWS_LOGIN
-  api_key  = "votre_api_key"     # ou variable d'environnement LWS_API_KEY
-  base_url = "https://api.lws.net" # par défaut
+terraform {
+  required_providers {
+    lws = {
+      source = "M4XGO/lws"
+    }
+  }
 }
 
-data "lws_dns_zone" "site" {
-  name = "votre-domaine.com"  # Assurez-vous que ce domaine existe
+provider "lws" {
+  login   = "votre-login-lws"
+  api_key = "votre-cle-api"
+}
+
+# Test avec data source
+data "lws_dns_zone" "example" {
+  name = "votre-domaine.com"
+}
+
+# Test avec resource
+resource "lws_dns_record" "test" {
+  name  = "test"
+  type  = "A"
+  value = "192.0.2.1"
+  zone  = "votre-domaine.com"
+  ttl   = 3600
 }
 ```
 
-### 6. Désactiver le logging
+### Nettoyage des Logs
+
+Pour désactiver le logging après diagnostic :
 
 ```bash
 unset TF_LOG
-unset TF_LOG_PROVIDER
-unset TF_LOG_PATH
-```
-
-## Erreurs Communes
-
-### Erreur 404 - "API returned empty response"
-
-**Causes possibles :**
-- Le domaine n'existe pas dans votre compte LWS
-- Mauvaise URL de base (vérifiez `base_url`)
-- Authentification incorrecte
-- Le domaine n'est pas géré par LWS
-
-**Solution :**
-1. Vérifiez que le domaine existe dans votre interface LWS
-2. Testez l'authentification avec curl :
-```bash
-curl -H "X-Auth-Login: votre_login" \
-     -H "X-Auth-Pass: votre_api_key" \
-     https://api.lws.net/v1/domain/votre-domaine.com/zdns
-```
-
-### Erreur 401 - "Unauthorized"
-
-**Causes :**
-- Login ou API key incorrects
-- API key expirée
-
-**Solution :**
-- Vérifiez vos identifiants LWS
-- Générez une nouvelle API key si nécessaire 
+``` 

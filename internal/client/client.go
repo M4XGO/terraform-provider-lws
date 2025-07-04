@@ -147,7 +147,7 @@ func (c *LWSClient) makeRequest(ctx context.Context, method, endpoint string, bo
 
 // GetDNSZone retrieves DNS zone information
 func (c *LWSClient) GetDNSZone(ctx context.Context, zoneName string) (*DNSZone, error) {
-	endpoint := fmt.Sprintf("v1/domain/%s/zdns", zoneName)
+	endpoint := fmt.Sprintf("domain/%s/zdns", zoneName)
 	resp, err := c.makeRequest(ctx, "GET", endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -178,7 +178,7 @@ func (c *LWSClient) GetDNSZone(ctx context.Context, zoneName string) (*DNSZone, 
 
 // CreateDNSRecord creates a new DNS record
 func (c *LWSClient) CreateDNSRecord(ctx context.Context, record *DNSRecord) (*DNSRecord, error) {
-	endpoint := fmt.Sprintf("v1/domain/%s/zdns", record.Zone)
+	endpoint := fmt.Sprintf("domain/%s/zdns", record.Zone)
 
 	// Prepare request body (only type, name, value, ttl)
 	reqBody := CreateDNSRecordRequest{
@@ -242,7 +242,7 @@ func (c *LWSClient) GetDNSRecord(ctx context.Context, domain, recordID string) (
 
 // UpdateDNSRecord updates an existing DNS record
 func (c *LWSClient) UpdateDNSRecord(ctx context.Context, record *DNSRecord) (*DNSRecord, error) {
-	endpoint := fmt.Sprintf("v1/domain/%s/zdns", record.Zone)
+	endpoint := fmt.Sprintf("domain/%s/zdns", record.Zone)
 
 	// Prepare request body (id, type, name, value, ttl)
 	reqBody := UpdateDNSRecordRequest{

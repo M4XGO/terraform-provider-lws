@@ -141,18 +141,22 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 
 	createdRecord, err := r.client.CreateDNSRecord(ctx, record)
 	if err != nil {
-		tflog.Error(ctx, "Failed to create DNS record", map[string]interface{}{
-			"name":     record.Name,
-			"type":     record.Type,
-			"zone":     record.Zone,
-			"error":    err.Error(),
-			"base_url": r.client.BaseURL,
-		})
+		// Provide more helpful error message
+		errorMsg := fmt.Sprintf("Unable to create DNS record '%s' in zone '%s', got error: %s", record.Name, record.Zone, err)
+		if r.client.TestMode {
+			errorMsg += "\n\nNote: You're in test mode. Make sure your test server is configured correctly."
+		} else {
+			errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/domain/%s/zdns",
+				r.client.BaseURL, r.client.Login, r.client.BaseURL, record.Zone)
+		}
 
-		errorMsg := fmt.Sprintf("Unable to create DNS record '%s' in zone '%s', got error: %s",
-			record.Name, record.Zone, err)
-		errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/v1/domain/%s/zdns",
-			r.client.BaseURL, r.client.Login, r.client.BaseURL, record.Zone)
+		tflog.Error(ctx, "Failed to create DNS record", map[string]interface{}{
+			"name":  record.Name,
+			"zone":  record.Zone,
+			"type":  record.Type,
+			"value": record.Value,
+			"error": err.Error(),
+		})
 
 		resp.Diagnostics.AddError("Client Error", errorMsg)
 		return
@@ -209,7 +213,7 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 
 		errorMsg := fmt.Sprintf("Unable to read DNS record ID '%s' in zone '%s', got error: %s",
 			recordID, zoneName, err)
-		errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/v1/domain/%s/zdns",
+		errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/domain/%s/zdns",
 			r.client.BaseURL, r.client.Login, r.client.BaseURL, zoneName)
 
 		resp.Diagnostics.AddError("Client Error", errorMsg)
