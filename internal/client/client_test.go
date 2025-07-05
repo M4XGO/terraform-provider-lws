@@ -234,6 +234,22 @@ func TestLWSClient_DeleteDNSRecord(t *testing.T) {
 			t.Errorf("Expected DELETE request, got %s", r.Method)
 		}
 
+		// Check if URL contains the zone name and correct endpoint
+		if !strings.Contains(r.URL.Path, "example.com") {
+			t.Errorf("Expected URL to contain zone name")
+		}
+		if !strings.Contains(r.URL.Path, "/domain/example.com/zdns") {
+			t.Errorf("Expected URL to match DELETE endpoint pattern")
+		}
+
+		// Check request body contains ID
+		body := make([]byte, r.ContentLength)
+		_, _ = r.Body.Read(body)
+		bodyStr := string(body)
+		if !strings.Contains(bodyStr, "12345") {
+			t.Errorf("Expected request body to contain record ID")
+		}
+
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"code": 200, "info": "Record deleted", "data": null}`))
 	}))
@@ -241,7 +257,7 @@ func TestLWSClient_DeleteDNSRecord(t *testing.T) {
 
 	client := NewLWSClient("testlogin", "testkey", server.URL, true)
 
-	err := client.DeleteDNSRecord(context.Background(), "12345")
+	err := client.DeleteDNSRecord(context.Background(), "12345", "example.com")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}

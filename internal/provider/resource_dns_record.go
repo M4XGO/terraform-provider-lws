@@ -399,7 +399,8 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 		data.Type = types.StringValue(foundRecord.Type)
 		data.Value = types.StringValue(foundRecord.Value)
 		data.TTL = types.Int64Value(int64(foundRecord.TTL))
-		data.Zone = types.StringValue(foundRecord.Zone)
+		// Keep the original zone name from state, not from the record
+		// data.Zone = types.StringValue(zoneName)
 
 		// Save corrected data into Terraform state
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -448,7 +449,8 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 	data.Type = types.StringValue(record.Type)
 	data.Value = types.StringValue(record.Value)
 	data.TTL = types.Int64Value(int64(record.TTL))
-	data.Zone = types.StringValue(record.Zone)
+	// Keep the original zone name from state, not from the record
+	// data.Zone = types.StringValue(zoneName)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -550,12 +552,43 @@ func (r *DNSRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 		return
 	}
 
+	recordID := data.ID.ValueString()
+	zoneName := data.Zone.ValueString()
+
+	tflog.Info(ctx, "Deleting DNS record", map[string]interface{}{
+		"record_id": recordID,
+		"zone":      zoneName,
+		"base_url":  r.client.BaseURL,
+		"login":     r.client.Login,
+	})
+
 	// Delete API call logic
-	err := r.client.DeleteDNSRecord(ctx, data.ID.ValueString())
+	err := r.client.DeleteDNSRecord(ctx, recordID, zoneName)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete DNS record, got error: %s", err))
+		errorMsg := fmt.Sprintf("Unable to delete DNS record ID '%s' in zone '%s', got error: %s",
+			recordID, zoneName, err)
+		if r.client.TestMode {
+			errorMsg += "\n\nNote: You're in test mode. Make sure your test server is configured correctly."
+		} else {
+			errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/domain/%s/zdns",
+				r.client.BaseURL, r.client.Login, r.client.BaseURL, zoneName)
+		}
+
+		tflog.Error(ctx, "Failed to delete DNS record", map[string]interface{}{
+			"record_id": recordID,
+			"zone":      zoneName,
+			"error":     err.Error(),
+		})
+
+		resp.Diagnostics.AddError("Client Error", errorMsg)
 		return
 	}
+
+	tflog.Info(ctx, "Successfully deleted DNS record", map[string]interface{}{
+		"record_id": recordID,
+		"zone":      zoneName,
+		"action":    "deleted",
+	})
 }
 
 func (r *DNSRecordResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

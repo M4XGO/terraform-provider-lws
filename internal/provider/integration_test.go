@@ -18,7 +18,7 @@ const (
 func setupTestServer() *httptest.Server {
 	mux := http.NewServeMux()
 
-	// Handle DNS record creation
+	// Handle DNS record deletion - should use same endpoint as create/update
 	mux.HandleFunc("/domain/example.com/zdns", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
@@ -87,25 +87,25 @@ func setupTestServer() *httptest.Server {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(response)
 
+		case http.MethodDelete:
+			// Handle DELETE - Delete record
+			var req map[string]interface{}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "Invalid request body", http.StatusBadRequest)
+				return
+			}
+
+			response := client.LWSAPIResponse{
+				Code: 200,
+				Info: "DNS record deleted",
+				Data: nil,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(response)
+
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
-	})
-
-	// Handle DNS record deletion
-	mux.HandleFunc("/dns/record/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		response := client.LWSAPIResponse{
-			Code: 200,
-			Info: "DNS record deleted",
-			Data: nil,
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
 	})
 
 	return httptest.NewServer(mux)
@@ -173,7 +173,7 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 	}
 
 	// Test 5: Delete DNS record
-	err = lwsClient.DeleteDNSRecord(context.Background(), "1")
+	err = lwsClient.DeleteDNSRecord(context.Background(), "1", "example.com")
 	if err != nil {
 		t.Fatalf("Failed to delete DNS record: %v", err)
 	}
