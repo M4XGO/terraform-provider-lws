@@ -307,7 +307,11 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 
 	// Save created record data into Terraform state
 	data.ID = types.StringValue(fmt.Sprintf("%d", createdRecord.ID))
+	data.Name = types.StringValue(createdRecord.Name)
+	data.Type = types.StringValue(createdRecord.Type)
+	data.Value = types.StringValue(createdRecord.Value)
 	data.TTL = types.Int64Value(int64(createdRecord.TTL))
+	data.Zone = types.StringValue(createdRecord.Zone)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
@@ -331,6 +335,21 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 	zoneName := data.Zone.ValueString()
 	recordName := data.Name.ValueString()
 	recordType := data.Type.ValueString()
+
+	// Check if zone is missing from state (common issue with older provider versions)
+	if zoneName == "" {
+		errorMsg := fmt.Sprintf("DNS record zone information is missing from Terraform state. This usually happens when upgrading from an older version of the provider.\n\n"+
+			"To fix this issue:\n"+
+			"1. Remove the resource from state: terraform state rm lws_dns_record.%s\n"+
+			"2. Re-import the resource with the zone: terraform import lws_dns_record.%s zone_name:%s\n"+
+			"3. Replace 'zone_name' with the actual DNS zone (e.g., example.com)\n\n"+
+			"Record Details:\n- Record ID: %s\n- Name: %s\n- Type: %s",
+			// We can't get the actual resource name here, so use placeholder
+			"RESOURCE_NAME", "RESOURCE_NAME", recordID, recordID, recordName, recordType)
+
+		resp.Diagnostics.AddError("Missing Zone Information", errorMsg)
+		return
+	}
 
 	tflog.Info(ctx, "Reading DNS record", map[string]interface{}{
 		"record_id": recordID,
@@ -399,8 +418,8 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 		data.Type = types.StringValue(foundRecord.Type)
 		data.Value = types.StringValue(foundRecord.Value)
 		data.TTL = types.Int64Value(int64(foundRecord.TTL))
-		// Keep the original zone name from state, not from the record
-		// data.Zone = types.StringValue(zoneName)
+		// Keep the original zone name from state
+		data.Zone = types.StringValue(zoneName)
 
 		// Save corrected data into Terraform state
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -449,8 +468,8 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 	data.Type = types.StringValue(record.Type)
 	data.Value = types.StringValue(record.Value)
 	data.TTL = types.Int64Value(int64(record.TTL))
-	// Keep the original zone name from state, not from the record
-	// data.Zone = types.StringValue(zoneName)
+	// Keep the original zone name from state
+	data.Zone = types.StringValue(zoneName)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -592,5 +611,83 @@ func (r *DNSRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 }
 
 func (r *DNSRecordResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	// Support two import formats:
+	// 1. "record_id" (legacy format, for backward compatibility)
+	// 2. "zone:record_id" (new format that includes zone information)
+
+	importID := req.ID
+
+	// Check if the import ID contains a colon (new format)
+	if strings.Contains(importID, ":") {
+		parts := strings.SplitN(importID, ":", 2)
+		if len(parts) != 2 {
+			resp.Diagnostics.AddError(
+				"Invalid Import ID Format",
+				fmt.Sprintf("Expected format 'zone:record_id', got '%s'. Examples:\n"+
+					"- terraform import lws_dns_record.example example.com:12345\n"+
+					"- terraform import lws_dns_record.example 12345 (legacy format)",
+					importID),
+			)
+			return
+		}
+
+		zoneName := strings.TrimSpace(parts[0])
+		recordID := strings.TrimSpace(parts[1])
+
+		if zoneName == "" || recordID == "" {
+			resp.Diagnostics.AddError(
+				"Invalid Import ID Format",
+				fmt.Sprintf("Zone and record ID cannot be empty. Got zone='%s', record_id='%s'", zoneName, recordID),
+			)
+			return
+		}
+
+		// Validate record ID is numeric
+		if _, err := strconv.Atoi(recordID); err != nil {
+			resp.Diagnostics.AddError(
+				"Invalid Record ID",
+				fmt.Sprintf("Record ID must be a number, got '%s'", recordID),
+			)
+			return
+		}
+
+		tflog.Info(ctx, "Importing DNS record with zone information", map[string]interface{}{
+			"zone":      zoneName,
+			"record_id": recordID,
+			"format":    "zone:record_id",
+		})
+
+		// Set both ID and zone in the state
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), recordID)...)
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("zone"), zoneName)...)
+
+	} else {
+		// Legacy format: just the record ID
+		// Validate record ID is numeric
+		if _, err := strconv.Atoi(importID); err != nil {
+			resp.Diagnostics.AddError(
+				"Invalid Record ID",
+				fmt.Sprintf("Record ID must be a number, got '%s'. For better import experience, use format 'zone:record_id'", importID),
+			)
+			return
+		}
+
+		tflog.Warn(ctx, "Importing DNS record without zone information (legacy format)", map[string]interface{}{
+			"record_id":      importID,
+			"format":         "record_id_only",
+			"recommendation": "Use 'zone:record_id' format for better import experience",
+		})
+
+		// Set only the ID, zone will need to be provided manually in the configuration
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), importID)...)
+
+		// Add a warning about the missing zone
+		resp.Diagnostics.AddWarning(
+			"Zone Information Missing",
+			fmt.Sprintf("Imported record ID '%s' without zone information. "+
+				"You must specify the 'zone' attribute in your Terraform configuration. "+
+				"For a better import experience, use: terraform import lws_dns_record.name zone_name:%s",
+				importID, importID),
+		)
+	}
 }
