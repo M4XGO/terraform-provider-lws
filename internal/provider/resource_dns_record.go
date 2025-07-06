@@ -572,20 +572,32 @@ func (r *DNSRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 	}
 
 	recordID := data.ID.ValueString()
+	recordName := data.Name.ValueString()
+	recordType := data.Type.ValueString()
 	zoneName := data.Zone.ValueString()
 
+	// Convert string ID to int
+	recordIDInt, err := strconv.Atoi(recordID)
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid Record ID",
+			fmt.Sprintf("Record ID '%s' is not a valid integer: %s", recordID, err))
+		return
+	}
+
 	tflog.Info(ctx, "Deleting DNS record", map[string]interface{}{
-		"record_id": recordID,
-		"zone":      zoneName,
-		"base_url":  r.client.BaseURL,
-		"login":     r.client.Login,
+		"record_id":   recordIDInt,
+		"record_name": recordName,
+		"record_type": recordType,
+		"zone":        zoneName,
+		"base_url":    r.client.BaseURL,
+		"login":       r.client.Login,
 	})
 
-	// Delete API call logic
-	err := r.client.DeleteDNSRecord(ctx, recordID, zoneName)
+	// Delete API call logic - using ID from state
+	err = r.client.DeleteDNSRecord(ctx, recordIDInt, zoneName)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Unable to delete DNS record ID '%s' in zone '%s', got error: %s",
-			recordID, zoneName, err)
+		errorMsg := fmt.Sprintf("Unable to delete DNS record ID %d ('%s' of type '%s') in zone '%s', got error: %s",
+			recordIDInt, recordName, recordType, zoneName, err)
 		if r.client.TestMode {
 			errorMsg += "\n\nNote: You're in test mode. Make sure your test server is configured correctly."
 		} else {
@@ -594,9 +606,11 @@ func (r *DNSRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 		}
 
 		tflog.Error(ctx, "Failed to delete DNS record", map[string]interface{}{
-			"record_id": recordID,
-			"zone":      zoneName,
-			"error":     err.Error(),
+			"record_id":   recordIDInt,
+			"record_name": recordName,
+			"record_type": recordType,
+			"zone":        zoneName,
+			"error":       err.Error(),
 		})
 
 		resp.Diagnostics.AddError("Client Error", errorMsg)
@@ -604,9 +618,11 @@ func (r *DNSRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 	}
 
 	tflog.Info(ctx, "Successfully deleted DNS record", map[string]interface{}{
-		"record_id": recordID,
-		"zone":      zoneName,
-		"action":    "deleted",
+		"record_id":   recordIDInt,
+		"record_name": recordName,
+		"record_type": recordType,
+		"zone":        zoneName,
+		"action":      "deleted",
 	})
 }
 

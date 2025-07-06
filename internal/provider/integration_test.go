@@ -18,6 +18,9 @@ const (
 func setupTestServer() *httptest.Server {
 	mux := http.NewServeMux()
 
+	// Store created records to return them in GET requests
+	var createdRecord *client.DNSRecord
+
 	// Handle DNS record deletion - should use same endpoint as create/update
 	mux.HandleFunc("/domain/example.com/zdns", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -27,6 +30,15 @@ func setupTestServer() *httptest.Server {
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, "Invalid request body", http.StatusBadRequest)
 				return
+			}
+
+			// Store created record for later retrieval
+			createdRecord = &client.DNSRecord{
+				ID:    1,
+				Name:  req.Name,
+				Type:  req.Type,
+				Value: req.Value,
+				TTL:   req.TTL,
 			}
 
 			// Mock response for created record
@@ -52,6 +64,12 @@ func setupTestServer() *httptest.Server {
 				return
 			}
 
+			// Update the stored record
+			if createdRecord != nil && createdRecord.ID == req.ID {
+				createdRecord.Value = req.Value
+				createdRecord.TTL = req.TTL
+			}
+
 			// Mock response for updated record
 			response := client.LWSAPIResponse{
 				Code: 200,
@@ -69,16 +87,23 @@ func setupTestServer() *httptest.Server {
 
 		case http.MethodGet:
 			// Handle GET - Get zone/records
-			// Mock response with a list of records
-			records := []client.DNSRecord{
-				{
-					ID:    1,
-					Name:  "test",
-					Type:  "A",
-					Value: "192.0.2.1",
-					TTL:   3600,
-				},
+			// Return the created record if it exists
+			var records []client.DNSRecord
+			if createdRecord != nil {
+				records = []client.DNSRecord{*createdRecord}
+			} else {
+				// Default record if none created yet
+				records = []client.DNSRecord{
+					{
+						ID:    1,
+						Name:  "test",
+						Type:  "A",
+						Value: "192.0.2.1",
+						TTL:   3600,
+					},
+				}
 			}
+
 			response := client.LWSAPIResponse{
 				Code: 200,
 				Info: "Fetched DNS Zone",
@@ -94,6 +119,9 @@ func setupTestServer() *httptest.Server {
 				http.Error(w, "Invalid request body", http.StatusBadRequest)
 				return
 			}
+
+			// Clear the created record when deleted
+			createdRecord = nil
 
 			response := client.LWSAPIResponse{
 				Code: 200,
@@ -143,8 +171,8 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 		t.Fatalf("Failed to get DNS record: %v", err)
 	}
 
-	if fetchedRecord.Name != "test" {
-		t.Errorf("Expected record name 'test', got '%s'", fetchedRecord.Name)
+	if fetchedRecord.Name != "www" {
+		t.Errorf("Expected record name 'www', got '%s'", fetchedRecord.Name)
 	}
 
 	// Test 3: Update DNS record
@@ -173,7 +201,7 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 	}
 
 	// Test 5: Delete DNS record
-	err = lwsClient.DeleteDNSRecord(context.Background(), "1", "example.com")
+	err = lwsClient.DeleteDNSRecord(context.Background(), fetchedRecord.ID, "example.com")
 	if err != nil {
 		t.Fatalf("Failed to delete DNS record: %v", err)
 	}

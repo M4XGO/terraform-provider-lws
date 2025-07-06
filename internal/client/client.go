@@ -239,9 +239,45 @@ func (c *LWSClient) CreateDNSRecord(ctx context.Context, record *DNSRecord) (*DN
 	// Set the zone since it's not in API response
 	createdRecord.Zone = record.Zone
 
+	log.Printf("[DEBUG] Successfully created record, but no ID returned from API")
+
+	// Since the API doesn't return an ID after creation, we need to find it
+	// by searching for the record we just created
+	log.Printf("[DEBUG] Searching for newly created record to get its ID...")
+	foundRecord, err := c.findDNSRecordByName(ctx, record.Zone, record.Name, record.Type)
+	if err != nil {
+		log.Printf("[ERROR] Failed to find newly created record: %v", err)
+		return nil, fmt.Errorf("record was created but failed to retrieve its ID: %w", err)
+	}
+
+	// Update the created record with the found ID
+	createdRecord.ID = foundRecord.ID
+
 	log.Printf("[DEBUG] Successfully created record with ID: %d", createdRecord.ID)
 
 	return &createdRecord, nil
+}
+
+// findDNSRecordByName finds a DNS record by name and type in the zone
+func (c *LWSClient) findDNSRecordByName(ctx context.Context, zoneName, recordName, recordType string) (*DNSRecord, error) {
+	// Get the entire zone first
+	zone, err := c.GetDNSZone(ctx, zoneName)
+	if err != nil {
+		return nil, fmt.Errorf("error getting DNS zone '%s': %w", zoneName, err)
+	}
+
+	// Find the record with the matching name and type
+	for _, record := range zone.Records {
+		if record.Name == recordName && record.Type == recordType {
+			// Set the zone since it's not in API response
+			record.Zone = zoneName
+			// Return a copy to avoid modifying the original slice
+			foundRecord := record
+			return &foundRecord, nil
+		}
+	}
+
+	return nil, fmt.Errorf("DNS record with name '%s' and type '%s' not found in zone '%s'", recordName, recordType, zoneName)
 }
 
 // GetDNSRecord retrieves a DNS record by ID from a specific domain
@@ -274,7 +310,12 @@ func (c *LWSClient) GetDNSRecord(ctx context.Context, domain, recordID string) (
 }
 
 // UpdateDNSRecord updates an existing DNS record
+// The record.ID must already be set (from the state)
 func (c *LWSClient) UpdateDNSRecord(ctx context.Context, record *DNSRecord) (*DNSRecord, error) {
+	if record.ID == 0 {
+		return nil, fmt.Errorf("record ID is required for update operation")
+	}
+
 	endpoint := fmt.Sprintf("domain/%s/zdns", record.Zone)
 
 	// Prepare request body (id, type, name, value, ttl)
@@ -285,6 +326,15 @@ func (c *LWSClient) UpdateDNSRecord(ctx context.Context, record *DNSRecord) (*DN
 		Value: record.Value,
 		TTL:   record.TTL,
 	}
+
+	log.Printf("[DEBUG] Updating DNS record for zone '%s':", record.Zone)
+	log.Printf("[DEBUG] - Endpoint: %s/%s", c.BaseURL, endpoint)
+	log.Printf("[DEBUG] - Record ID: %d", reqBody.ID)
+	log.Printf("[DEBUG] - Record Type: %s", reqBody.Type)
+	log.Printf("[DEBUG] - Record Name: '%s'", reqBody.Name)
+	log.Printf("[DEBUG] - Record Value: %s", reqBody.Value)
+	log.Printf("[DEBUG] - Record TTL: %d", reqBody.TTL)
+	log.Printf("[DEBUG] - Test Mode: %t", c.TestMode)
 
 	resp, err := c.makeRequest(ctx, "PUT", endpoint, reqBody)
 	if err != nil {
@@ -308,11 +358,51 @@ func (c *LWSClient) UpdateDNSRecord(ctx context.Context, record *DNSRecord) (*DN
 	// Set the zone since it's not in API response
 	updatedRecord.Zone = record.Zone
 
+	log.Printf("[DEBUG] Successfully updated record with ID: %d", updatedRecord.ID)
+
 	return &updatedRecord, nil
 }
 
-// DeleteDNSRecord deletes a DNS record
-func (c *LWSClient) DeleteDNSRecord(ctx context.Context, recordID string, zoneName string) error {
+// DeleteDNSRecord deletes a DNS record by ID
+// The recordID must be provided (from the state)
+func (c *LWSClient) DeleteDNSRecord(ctx context.Context, recordID int, zoneName string) error {
+	if recordID == 0 {
+		return fmt.Errorf("record ID is required for delete operation")
+	}
+
+	endpoint := fmt.Sprintf("domain/%s/zdns", zoneName)
+
+	// Prepare request body with ID
+	reqBody := map[string]interface{}{
+		"id": recordID,
+	}
+
+	// Log detailed request information
+	log.Printf("[DEBUG] Deleting DNS record:")
+	log.Printf("[DEBUG] - Endpoint: %s/%s", c.BaseURL, endpoint)
+	log.Printf("[DEBUG] - Record ID: %d", recordID)
+	log.Printf("[DEBUG] - Zone: %s", zoneName)
+	log.Printf("[DEBUG] - Test Mode: %t", c.TestMode)
+
+	resp, err := c.makeRequest(ctx, "DELETE", endpoint, reqBody)
+	if err != nil {
+		log.Printf("[ERROR] Failed to make delete request: %v", err)
+		return err
+	}
+
+	// Accept both 200 and 201 as success codes for deletion
+	if resp.Code != 200 && resp.Code != 201 {
+		log.Printf("[ERROR] API returned error code %d: %s", resp.Code, resp.GetInfoMessage())
+		return fmt.Errorf("API error: %s", resp.GetInfoMessage())
+	}
+
+	log.Printf("[DEBUG] Successfully deleted record with ID: %d", recordID)
+
+	return nil
+}
+
+// DeleteDNSRecordByID deletes a DNS record by ID (legacy method for backward compatibility)
+func (c *LWSClient) DeleteDNSRecordByID(ctx context.Context, recordID string, zoneName string) error {
 	endpoint := fmt.Sprintf("domain/%s/zdns", zoneName)
 
 	// Convert string ID to int
@@ -327,7 +417,7 @@ func (c *LWSClient) DeleteDNSRecord(ctx context.Context, recordID string, zoneNa
 	}
 
 	// Log detailed request information
-	log.Printf("[DEBUG] Deleting DNS record:")
+	log.Printf("[DEBUG] Deleting DNS record by ID:")
 	log.Printf("[DEBUG] - Endpoint: %s/%s", c.BaseURL, endpoint)
 	log.Printf("[DEBUG] - Record ID: %d", recordIDInt)
 	log.Printf("[DEBUG] - Zone: %s", zoneName)
@@ -339,7 +429,8 @@ func (c *LWSClient) DeleteDNSRecord(ctx context.Context, recordID string, zoneNa
 		return err
 	}
 
-	if resp.Code != 200 {
+	// Accept both 200 and 201 as success codes for deletion
+	if resp.Code != 200 && resp.Code != 201 {
 		log.Printf("[ERROR] API returned error code %d: %s", resp.Code, resp.GetInfoMessage())
 		return fmt.Errorf("API error: %s", resp.GetInfoMessage())
 	}
