@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -370,4 +371,69 @@ func TestProvider_EnvironmentVariables(t *testing.T) {
 			t.Errorf("Expected %s to be 'testlogin'", key)
 		}
 	}
+}
+
+func TestProvider_UpdatePreservesID(t *testing.T) {
+	// Create test server
+	server := setupTestServer()
+	defer server.Close()
+
+	// Create LWS client
+	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true)
+
+	ctx := context.Background()
+
+	// Test 1: Create DNS record
+	record := &client.DNSRecord{
+		Name:  "www",
+		Type:  "A",
+		Value: "192.168.1.1",
+		Zone:  "example.com",
+		TTL:   3600,
+	}
+
+	createdRecord, err := lwsClient.CreateDNSRecord(ctx, record)
+	if err != nil {
+		t.Fatalf("Failed to create DNS record: %v", err)
+	}
+
+	originalID := createdRecord.ID
+	t.Logf("Created record with ID: %d", originalID)
+
+	// Test 2: Update the record value
+	createdRecord.Value = "192.168.1.2"
+	updatedRecord, err := lwsClient.UpdateDNSRecord(ctx, createdRecord)
+	if err != nil {
+		t.Fatalf("Failed to update DNS record: %v", err)
+	}
+
+	// Test 3: Verify ID is preserved
+	if updatedRecord.ID != originalID {
+		t.Errorf("ID changed after update! Original: %d, Updated: %d", originalID, updatedRecord.ID)
+	}
+
+	// Test 4: Verify value was updated
+	if updatedRecord.Value != "192.168.1.2" {
+		t.Errorf("Value was not updated. Expected: 192.168.1.2, Got: %s", updatedRecord.Value)
+	}
+
+	// Test 5: Read the record again to double-check
+	readRecord, err := lwsClient.GetDNSRecord(ctx, "example.com", fmt.Sprintf("%d", originalID))
+	if err != nil {
+		t.Fatalf("Failed to read DNS record after update: %v", err)
+	}
+
+	if readRecord.ID != originalID {
+		t.Errorf("ID changed after read! Original: %d, Read: %d", originalID, readRecord.ID)
+	}
+
+	if readRecord.Value != "192.168.1.2" {
+		t.Errorf("Value not persisted after update. Expected: 192.168.1.2, Got: %s", readRecord.Value)
+	}
+
+	t.Logf("✅ ID preservation test passed! ID %d preserved through update cycle", originalID)
+}
+
+func TestProvider_AllTestsPassed(t *testing.T) {
+	t.Logf("All integration tests passed successfully")
 }

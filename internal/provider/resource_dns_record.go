@@ -622,6 +622,7 @@ func (r *DNSRecordResource) Update(ctx context.Context, req resource.UpdateReque
 	})
 
 	// Update the model with the updated data from API response
+	data.ID = types.StringValue(fmt.Sprintf("%d", updatedRecord.ID))
 	data.Name = types.StringValue(updatedRecord.Name)
 	data.Type = types.StringValue(updatedRecord.Type)
 	data.Value = types.StringValue(updatedRecord.Value)
