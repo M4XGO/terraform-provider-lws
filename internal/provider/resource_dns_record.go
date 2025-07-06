@@ -362,8 +362,28 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 	recordName := data.Name.ValueString()
 	recordType := data.Type.ValueString()
 
+	// DEBUG: Log the current state being read
+	tflog.Debug(ctx, "🔍 READ: Starting read operation", map[string]interface{}{
+		"state_record_id": recordID,
+		"state_zone":      zoneName,
+		"state_name":      recordName,
+		"state_type":      recordType,
+		"state_value":     data.Value.ValueString(),
+		"state_ttl":       data.TTL.ValueInt64(),
+		"id_is_null":      data.ID.IsNull(),
+		"id_is_unknown":   data.ID.IsUnknown(),
+		"zone_is_null":    data.Zone.IsNull(),
+		"zone_is_unknown": data.Zone.IsUnknown(),
+	})
+
 	// Check if zone is missing from state (common issue with older provider versions)
 	if zoneName == "" {
+		tflog.Error(ctx, "🚨 READ: Zone missing from state", map[string]interface{}{
+			"record_id": recordID,
+			"name":      recordName,
+			"type":      recordType,
+		})
+
 		errorMsg := fmt.Sprintf("DNS record zone information is missing from Terraform state. This usually happens when upgrading from an older version of the provider.\n\n"+
 			"To fix this issue:\n"+
 			"1. Remove the resource from state: terraform state rm lws_dns_record.%s\n"+
@@ -389,22 +409,27 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 	// Check if ID is invalid (0 or empty)
 	recordIDInt, err := strconv.Atoi(recordID)
 	if err != nil || recordIDInt <= 0 {
-		tflog.Warn(ctx, "Invalid record ID in state, attempting to find record by name/type", map[string]interface{}{
-			"invalid_id": recordID,
-			"zone":       zoneName,
-			"name":       recordName,
-			"type":       recordType,
+		tflog.Warn(ctx, "🟡 READ: Invalid record ID in state, attempting to find record by name/type", map[string]interface{}{
+			"invalid_id":       recordID,
+			"conversion_error": err,
+			"zone":             zoneName,
+			"name":             recordName,
+			"type":             recordType,
 		})
 
 		// Try to find the record by name and type in the zone
 		zone, err := r.client.GetDNSZone(ctx, zoneName)
 		if err != nil {
-			tflog.Error(ctx, "Failed to get DNS zone to find record by name/type", map[string]interface{}{
+			tflog.Error(ctx, "🚨 READ: Failed to get DNS zone to find record by name/type", map[string]interface{}{
 				"zone":  zoneName,
 				"error": err.Error(),
 			})
 
 			// If we can't get the zone, assume the record is deleted
+			tflog.Info(ctx, "🗑️ READ: Removing resource from state due to zone fetch error", map[string]interface{}{
+				"zone":   zoneName,
+				"reason": "zone_fetch_failed",
+			})
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -419,7 +444,7 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 		}
 
 		if foundRecord == nil {
-			tflog.Info(ctx, "DNS record not found in zone, marking as deleted", map[string]interface{}{
+			tflog.Info(ctx, "🗑️ READ: DNS record not found in zone, marking as deleted", map[string]interface{}{
 				"zone": zoneName,
 				"name": recordName,
 				"type": recordType,
@@ -430,7 +455,7 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 			return
 		}
 
-		tflog.Info(ctx, "Found DNS record by name/type, updating ID in state", map[string]interface{}{
+		tflog.Info(ctx, "✅ READ: Found DNS record by name/type, updating ID in state", map[string]interface{}{
 			"zone":     zoneName,
 			"name":     recordName,
 			"type":     recordType,
@@ -448,51 +473,114 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 		data.Zone = types.StringValue(zoneName)
 
 		// Save corrected data into Terraform state
+		tflog.Debug(ctx, "💾 READ: Saving corrected state after finding by name", map[string]interface{}{
+			"corrected_id":    foundRecord.ID,
+			"corrected_name":  foundRecord.Name,
+			"corrected_type":  foundRecord.Type,
+			"corrected_value": foundRecord.Value,
+			"corrected_ttl":   foundRecord.TTL,
+		})
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 		return
 	}
 
 	// Normal flow: get record by ID
+	tflog.Debug(ctx, "🔍 READ: Normal flow - fetching record by ID", map[string]interface{}{
+		"record_id_int": recordIDInt,
+		"zone":          zoneName,
+	})
+
 	record, err := r.client.GetDNSRecord(ctx, zoneName, recordID)
 	if err != nil {
-		tflog.Error(ctx, "Failed to read DNS record", map[string]interface{}{
+		tflog.Error(ctx, "🚨 READ: Failed to read DNS record by ID, trying fallback search", map[string]interface{}{
 			"record_id": recordID,
 			"zone":      zoneName,
 			"error":     err.Error(),
 			"base_url":  r.client.BaseURL,
 		})
 
-		// Check if it's a "not found" error, in which case we should remove from state
+		// Check if it's a "not found" error - try fallback search by name/type
 		errorMsg := strings.ToLower(err.Error())
 		if strings.Contains(errorMsg, "not found") || strings.Contains(errorMsg, "record with id") {
-			tflog.Info(ctx, "DNS record not found, removing from state", map[string]interface{}{
+			tflog.Warn(ctx, "🔄 READ: Record ID not found, attempting fallback search by name/type", map[string]interface{}{
+				"old_record_id": recordID,
+				"zone":          zoneName,
+				"name":          recordName,
+				"type":          recordType,
+				"reason":        "id_changed_or_invalid",
+			})
+
+			// Try to find the record by name and type in the zone
+			zone, err := r.client.GetDNSZone(ctx, zoneName)
+			if err != nil {
+				tflog.Error(ctx, "🚨 READ: Failed to get DNS zone for fallback search", map[string]interface{}{
+					"zone":  zoneName,
+					"error": err.Error(),
+				})
+
+				// If we can't get the zone, assume the record is deleted
+				tflog.Info(ctx, "🗑️ READ: Removing resource from state due to zone fetch error", map[string]interface{}{
+					"zone":   zoneName,
+					"reason": "fallback_zone_fetch_failed",
+				})
+				resp.State.RemoveResource(ctx)
+				return
+			}
+
+			// Look for the record by name and type
+			var foundRecord *client.DNSRecord
+			for _, rec := range zone.Records {
+				if rec.Name == recordName && rec.Type == recordType {
+					foundRecord = &rec
+					break
+				}
+			}
+
+			if foundRecord == nil {
+				tflog.Info(ctx, "🗑️ READ: DNS record not found by name/type either, removing from state", map[string]interface{}{
+					"zone": zoneName,
+					"name": recordName,
+					"type": recordType,
+				})
+
+				// Record doesn't exist, remove from state
+				resp.State.RemoveResource(ctx)
+				return
+			}
+
+			tflog.Info(ctx, "✅ READ: Found DNS record by name/type, updating ID in state", map[string]interface{}{
+				"zone":   zoneName,
+				"name":   recordName,
+				"type":   recordType,
+				"old_id": recordID,
+				"new_id": foundRecord.ID,
+				"reason": "id_drift_detected",
+			})
+
+			// Use the found record
+			record = foundRecord
+		} else {
+			// For other errors, still try to remove from state but log it as a warning
+			tflog.Warn(ctx, "🟡 READ: Unable to read DNS record, assuming deleted and removing from state", map[string]interface{}{
 				"record_id": recordID,
 				"zone":      zoneName,
-				"reason":    "record_not_found_in_api",
+				"error":     err.Error(),
+				"reason":    "api_error_assuming_deleted",
 			})
+
 			resp.State.RemoveResource(ctx)
 			return
 		}
-
-		// For other errors, still try to remove from state but log it as a warning
-		tflog.Warn(ctx, "Unable to read DNS record, assuming deleted and removing from state", map[string]interface{}{
-			"record_id": recordID,
-			"zone":      zoneName,
-			"error":     err.Error(),
-			"reason":    "api_error_assuming_deleted",
-		})
-
-		resp.State.RemoveResource(ctx)
-		return
 	}
 
-	tflog.Debug(ctx, "Successfully read DNS record", map[string]interface{}{
+	tflog.Debug(ctx, "✅ READ: Successfully read DNS record from API", map[string]interface{}{
 		"record_id": recordID,
-		"name":      record.Name,
-		"type":      record.Type,
-		"value":     record.Value,
-		"zone":      record.Zone,
-		"ttl":       record.TTL,
+		"api_id":    record.ID,
+		"api_name":  record.Name,
+		"api_type":  record.Type,
+		"api_value": record.Value,
+		"api_zone":  record.Zone,
+		"api_ttl":   record.TTL,
 	})
 
 	// Update the model with refreshed data
@@ -504,8 +592,29 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 	// Keep the original zone name from state
 	data.Zone = types.StringValue(zoneName)
 
+	// DEBUG: Log what we're saving to state
+	tflog.Debug(ctx, "💾 READ: Saving updated state", map[string]interface{}{
+		"final_id":    fmt.Sprintf("%d", record.ID),
+		"final_name":  record.Name,
+		"final_type":  record.Type,
+		"final_value": record.Value,
+		"final_ttl":   record.TTL,
+		"final_zone":  zoneName,
+	})
+
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+
+	// DEBUG: Verify if state was saved correctly
+	if resp.Diagnostics.HasError() {
+		tflog.Error(ctx, "🚨 READ: Error saving state", map[string]interface{}{
+			"errors": resp.Diagnostics.Errors(),
+		})
+	} else {
+		tflog.Debug(ctx, "✅ READ: State saved successfully", map[string]interface{}{
+			"operation": "completed",
+		})
+	}
 }
 
 func (r *DNSRecordResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -649,6 +758,23 @@ func (r *DNSRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 	recordType := strings.TrimSpace(data.Type.ValueString())
 	zoneName := strings.TrimSpace(data.Zone.ValueString())
 
+	// DEBUG: Log the current state being deleted
+	tflog.Debug(ctx, "🗑️ DELETE: Starting delete operation", map[string]interface{}{
+		"state_record_id": recordID,
+		"state_zone":      zoneName,
+		"state_name":      recordName,
+		"state_type":      recordType,
+		"state_value":     data.Value.ValueString(),
+		"state_ttl":       data.TTL.ValueInt64(),
+		"id_is_null":      data.ID.IsNull(),
+		"id_is_unknown":   data.ID.IsUnknown(),
+		"zone_is_null":    data.Zone.IsNull(),
+		"zone_is_unknown": data.Zone.IsUnknown(),
+		"base_url":        r.client.BaseURL,
+		"login":           r.client.Login,
+		"test_mode":       r.client.TestMode,
+	})
+
 	// Manual validation for required fields
 	if recordID == "" {
 		resp.Diagnostics.AddError("Validation Error", "DNS record ID cannot be empty for delete operation")
@@ -720,6 +846,14 @@ func (r *DNSRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 		"record_type": recordType,
 		"zone":        zoneName,
 		"action":      "deleted",
+	})
+
+	// DEBUG: Confirm deletion completion
+	tflog.Debug(ctx, "✅ DELETE: Delete operation completed successfully", map[string]interface{}{
+		"record_id":         recordIDInt,
+		"zone":              zoneName,
+		"operation":         "completed",
+		"framework_handles": "state_removal",
 	})
 
 	// The resource is automatically removed from state by the framework
