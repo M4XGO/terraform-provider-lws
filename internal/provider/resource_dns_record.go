@@ -118,12 +118,38 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
+	// Manual validation for required fields
+	recordName := strings.TrimSpace(data.Name.ValueString())
+	recordType := strings.TrimSpace(data.Type.ValueString())
+	recordValue := strings.TrimSpace(data.Value.ValueString())
+	zoneName := strings.TrimSpace(data.Zone.ValueString())
+
+	if recordName == "" {
+		resp.Diagnostics.AddError("Validation Error", "DNS record name cannot be empty")
+		return
+	}
+
+	if recordType == "" {
+		resp.Diagnostics.AddError("Validation Error", "DNS record type cannot be empty")
+		return
+	}
+
+	if recordValue == "" {
+		resp.Diagnostics.AddError("Validation Error", "DNS record value cannot be empty")
+		return
+	}
+
+	if zoneName == "" {
+		resp.Diagnostics.AddError("Validation Error", "DNS zone name cannot be empty")
+		return
+	}
+
 	// Create API call logic
 	record := &client.DNSRecord{
-		Name:  data.Name.ValueString(),
-		Type:  data.Type.ValueString(),
-		Value: data.Value.ValueString(),
-		Zone:  data.Zone.ValueString(),
+		Name:  recordName,
+		Type:  recordType,
+		Value: recordValue,
+		Zone:  zoneName,
 	}
 
 	if !data.TTL.IsNull() {
@@ -437,21 +463,26 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 		})
 
 		// Check if it's a "not found" error, in which case we should remove from state
-		if strings.Contains(err.Error(), "not found") {
+		errorMsg := strings.ToLower(err.Error())
+		if strings.Contains(errorMsg, "not found") || strings.Contains(errorMsg, "record with id") {
 			tflog.Info(ctx, "DNS record not found, removing from state", map[string]interface{}{
 				"record_id": recordID,
 				"zone":      zoneName,
+				"reason":    "record_not_found_in_api",
 			})
 			resp.State.RemoveResource(ctx)
 			return
 		}
 
-		errorMsg := fmt.Sprintf("Unable to read DNS record ID '%s' in zone '%s', got error: %s",
-			recordID, zoneName, err)
-		errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/domain/%s/zdns",
-			r.client.BaseURL, r.client.Login, r.client.BaseURL, zoneName)
+		// For other errors, still try to remove from state but log it as a warning
+		tflog.Warn(ctx, "Unable to read DNS record, assuming deleted and removing from state", map[string]interface{}{
+			"record_id": recordID,
+			"zone":      zoneName,
+			"error":     err.Error(),
+			"reason":    "api_error_assuming_deleted",
+		})
 
-		resp.Diagnostics.AddError("Client Error", errorMsg)
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
@@ -461,6 +492,7 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 		"type":      record.Type,
 		"value":     record.Value,
 		"zone":      record.Zone,
+		"ttl":       record.TTL,
 	})
 
 	// Update the model with refreshed data
@@ -485,20 +517,59 @@ func (r *DNSRecordResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	// Convert string ID to int
-	recordID, err := strconv.Atoi(data.ID.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to convert record ID to integer: %s", err))
+	recordID := strings.TrimSpace(data.ID.ValueString())
+	recordName := strings.TrimSpace(data.Name.ValueString())
+	recordType := strings.TrimSpace(data.Type.ValueString())
+	recordValue := strings.TrimSpace(data.Value.ValueString())
+	zoneName := strings.TrimSpace(data.Zone.ValueString())
+
+	// Manual validation for required fields
+	if recordID == "" {
+		resp.Diagnostics.AddError("Validation Error", "DNS record ID cannot be empty for update operation")
 		return
 	}
 
-	// Update API call logic
+	if recordName == "" {
+		resp.Diagnostics.AddError("Validation Error", "DNS record name cannot be empty")
+		return
+	}
+
+	if recordType == "" {
+		resp.Diagnostics.AddError("Validation Error", "DNS record type cannot be empty")
+		return
+	}
+
+	if recordValue == "" {
+		resp.Diagnostics.AddError("Validation Error", "DNS record value cannot be empty")
+		return
+	}
+
+	if zoneName == "" {
+		resp.Diagnostics.AddError("Validation Error", "DNS zone name cannot be empty")
+		return
+	}
+
+	// Convert string ID to int for validation
+	recordIDInt, err := strconv.Atoi(recordID)
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid Record ID",
+			fmt.Sprintf("Record ID '%s' is not a valid integer: %s", recordID, err))
+		return
+	}
+
+	if recordIDInt <= 0 {
+		resp.Diagnostics.AddError("Invalid Record ID",
+			fmt.Sprintf("Record ID must be a positive integer, got: %d", recordIDInt))
+		return
+	}
+
+	// Create record object for API call
 	record := &client.DNSRecord{
-		ID:    recordID,
-		Name:  data.Name.ValueString(),
-		Type:  data.Type.ValueString(),
-		Value: data.Value.ValueString(),
-		Zone:  data.Zone.ValueString(),
+		ID:    recordIDInt,
+		Name:  recordName,
+		Type:  recordType,
+		Value: recordValue,
+		Zone:  zoneName,
 	}
 
 	if !data.TTL.IsNull() {
@@ -506,7 +577,7 @@ func (r *DNSRecordResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	tflog.Info(ctx, "Updating DNS record", map[string]interface{}{
-		"record_id": recordID,
+		"record_id": recordIDInt,
 		"name":      record.Name,
 		"type":      record.Type,
 		"value":     record.Value,
@@ -519,7 +590,7 @@ func (r *DNSRecordResource) Update(ctx context.Context, req resource.UpdateReque
 	updatedRecord, err := r.client.UpdateDNSRecord(ctx, record)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Unable to update DNS record '%s' (ID: %d) in zone '%s', got error: %s",
-			record.Name, recordID, record.Zone, err)
+			record.Name, recordIDInt, record.Zone, err)
 		if r.client.TestMode {
 			errorMsg += "\n\nNote: You're in test mode. Make sure your test server is configured correctly."
 		} else {
@@ -528,7 +599,7 @@ func (r *DNSRecordResource) Update(ctx context.Context, req resource.UpdateReque
 		}
 
 		tflog.Error(ctx, "Failed to update DNS record", map[string]interface{}{
-			"record_id": recordID,
+			"record_id": recordIDInt,
 			"name":      record.Name,
 			"zone":      record.Zone,
 			"type":      record.Type,
@@ -541,7 +612,7 @@ func (r *DNSRecordResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	tflog.Info(ctx, "Successfully updated DNS record", map[string]interface{}{
-		"record_id": recordID,
+		"record_id": recordIDInt,
 		"name":      updatedRecord.Name,
 		"type":      updatedRecord.Type,
 		"value":     updatedRecord.Value,
@@ -571,16 +642,33 @@ func (r *DNSRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 		return
 	}
 
-	recordID := data.ID.ValueString()
-	recordName := data.Name.ValueString()
-	recordType := data.Type.ValueString()
-	zoneName := data.Zone.ValueString()
+	recordID := strings.TrimSpace(data.ID.ValueString())
+	recordName := strings.TrimSpace(data.Name.ValueString())
+	recordType := strings.TrimSpace(data.Type.ValueString())
+	zoneName := strings.TrimSpace(data.Zone.ValueString())
+
+	// Manual validation for required fields
+	if recordID == "" {
+		resp.Diagnostics.AddError("Validation Error", "DNS record ID cannot be empty for delete operation")
+		return
+	}
+
+	if zoneName == "" {
+		resp.Diagnostics.AddError("Validation Error", "DNS zone name cannot be empty for delete operation")
+		return
+	}
 
 	// Convert string ID to int
 	recordIDInt, err := strconv.Atoi(recordID)
 	if err != nil {
 		resp.Diagnostics.AddError("Invalid Record ID",
 			fmt.Sprintf("Record ID '%s' is not a valid integer: %s", recordID, err))
+		return
+	}
+
+	if recordIDInt <= 0 {
+		resp.Diagnostics.AddError("Invalid Record ID",
+			fmt.Sprintf("Record ID must be a positive integer, got: %d", recordIDInt))
 		return
 	}
 
@@ -591,6 +679,13 @@ func (r *DNSRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 		"zone":        zoneName,
 		"base_url":    r.client.BaseURL,
 		"login":       r.client.Login,
+	})
+
+	// Debug: Log the exact parameters being passed to the API
+	tflog.Debug(ctx, "Delete API call parameters", map[string]interface{}{
+		"record_id_int": recordIDInt,
+		"zone_name":     zoneName,
+		"endpoint":      fmt.Sprintf("%s/domain/%s/zdns", r.client.BaseURL, zoneName),
 	})
 
 	// Delete API call logic - using ID from state
@@ -624,6 +719,9 @@ func (r *DNSRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 		"zone":        zoneName,
 		"action":      "deleted",
 	})
+
+	// The resource is automatically removed from state by the framework
+	// No need to manually clear the state
 }
 
 func (r *DNSRecordResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
