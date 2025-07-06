@@ -1,3 +1,30 @@
+## [Unreleased]
+
+### Features
+
+* **provider:** add automatic ID drift detection and recovery
+* **provider:** enhance robust error handling with detailed validation
+* **provider:** implement comprehensive debug logging for troubleshooting
+* **provider:** add fallback logic for record ID changes during updates
+* **tests:** add ID drift simulation and recovery tests
+* **tests:** enhance integration tests for complete workflow validation
+
+### Bug Fixes
+
+* **resource:** fix ID preservation in Update and Read operations preventing resource recreation
+* **resource:** resolve state management issues causing plan inconsistencies after apply
+* **resource:** improve record lookup fallback when API changes record IDs
+* **validation:** add required field validation with descriptive error messages
+* **docs:** correct field name inconsistencies (content → value) in all examples
+* **docs:** update documentation with new features and troubleshooting guides
+
+### Documentation
+
+* **provider:** enhance main provider documentation with debugging guides
+* **resource:** add comprehensive DNS record documentation with supported types
+* **readme:** update with improved features list and troubleshooting section
+* **examples:** correct all examples to use proper field names and formatting
+
 ## [](https://github.com/M4XGO/terraform-provider-lws/compare/v2.1.5...v) (2025-07-03)
 
 

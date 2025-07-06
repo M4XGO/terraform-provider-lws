@@ -7,7 +7,15 @@ description: |-
 
 # lws Provider
 
+A Terraform provider for managing DNS records with LWS (French hosting provider). 
 
+## Key Features
+
+- ✅ **Robust DNS Record Management** - Create, update, delete DNS records with automatic validation
+- ✅ **ID Drift Detection** - Automatically recovers when LWS API changes record IDs
+- ✅ **Enhanced Error Handling** - Detailed error messages and graceful failure recovery
+- ✅ **Debug Support** - Comprehensive logging for troubleshooting
+- ✅ **Import Support** - Import existing DNS records into Terraform state
 
 ## Example Usage
 
@@ -16,7 +24,7 @@ terraform {
   required_providers {
     lws = {
       source  = "M4XGO/lws"
-      version = "~> 2.0"
+      version = "~> 0.1.0"
     }
   }
 }
@@ -28,6 +36,23 @@ provider "lws" {
   
   # Optional: Custom API endpoint
   # endpoint = "https://api.lws.fr"
+}
+
+# Example: Manage DNS records
+resource "lws_dns_record" "www" {
+  zone  = "example.com"
+  name  = "www"
+  type  = "A"
+  value = "192.168.1.1"
+  ttl   = 3600
+}
+
+resource "lws_dns_record" "api" {
+  zone  = "example.com"
+  name  = "api"
+  type  = "CNAME"
+  value = "api-server.example.com"
+  ttl   = 300
 }
 ```
 
@@ -61,6 +86,42 @@ provider "lws" {
   # Optional: specify a different API endpoint
   # endpoint = "https://api.lws.fr"
 }
+```
+
+## Debugging & Troubleshooting
+
+### Enable Debug Logging
+
+For detailed troubleshooting, enable Terraform debug logging:
+
+```bash
+export TF_LOG=DEBUG
+terraform plan
+terraform apply
+```
+
+Debug logs will show:
+- 🔍 API request/response details
+- 🎯 Record ID tracking and drift detection
+- ⚠️ Validation errors and warnings
+- 📊 State management operations
+
+### Common Issues
+
+#### Record ID Changes
+The LWS API may change record IDs during updates. The provider automatically detects this and updates the Terraform state - no manual intervention required.
+
+#### Validation Errors
+The provider validates all required fields before making API calls:
+- `name`: Cannot be empty or whitespace-only
+- `type`: Must be a valid DNS record type
+- `value`: Cannot be empty or whitespace-only  
+- `zone`: Must be a valid domain name
+
+#### Import Existing Records
+You can import existing DNS records:
+```bash
+terraform import lws_dns_record.example 12345
 ```
 
 ## API Documentation

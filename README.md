@@ -9,7 +9,7 @@ terraform {
   required_providers {
     lws = {
       source  = "M4XGO/lws"
-      version = "~> 2.0"
+      version = "~> 0.1.0"
     }
   }
 }
@@ -25,11 +25,11 @@ data "lws_dns_zone" "example" {
 
 # Example DNS record resource
 resource "lws_dns_record" "example" {
-  zone = data.lws_dns_zone.example.zone
-  name = "www"
-  type = "A"
-  content = "192.168.1.1"
-  ttl = 3600
+  zone  = data.lws_dns_zone.example.zone
+  name  = "www"
+  type  = "A"
+  value = "192.168.1.1"
+  ttl   = 3600
 }
 ```
 
@@ -52,7 +52,7 @@ terraform {
   required_providers {
     lws = {
       source  = "M4XGO/lws"
-      version = "~> 2.0"
+      version = "~> 0.1.0"
     }
   }
 }
@@ -89,32 +89,35 @@ Si vous voyez ces erreurs sur registry.terraform.io :
 
 ## 🎯 Fonctionnalités
 
-- ✅ Gestion complète des enregistrements DNS
-- ✅ Support des types A, AAAA, CNAME, MX, TXT
-- ✅ Validation automatique des données
-- ✅ Tests unitaires et d'intégration complets
-- ✅ Documentation français/anglais
-- ✅ CI/CD automatisé avec releases signées GPG
+- ✅ **Gestion robuste des enregistrements DNS** - Création, modification, suppression avec validation automatique
+- ✅ **Détection automatique des changements d'ID** - Récupération transparente quand l'API LWS change les IDs
+- ✅ **Gestion d'erreurs améliorée** - Messages d'erreur détaillés et récupération gracieuse
+- ✅ **Support de debug avancé** - Logs détaillés pour le troubleshooting
+- ✅ **Support d'import** - Import des enregistrements DNS existants dans Terraform
+- ✅ **Support des types A, AAAA, CNAME, MX, TXT, NS, SRV, etc.**
+- ✅ **Tests unitaires et d'intégration complets** - Incluant tests de drift d'ID
+- ✅ **Documentation français/anglais** - Avec exemples pratiques
+- ✅ **CI/CD automatisé** - Releases signées GPG
 
 ## 📝 Exemple d'utilisation
 
 ```hcl
 # Créer un enregistrement A
 resource "lws_dns_record" "www" {
-  zone_name = "mondomaine.fr"
-  name      = "www"
-  type      = "A"
-  value     = "192.168.1.100"
-  ttl       = 3600
+  zone  = "mondomaine.fr"
+  name  = "www"
+  type  = "A"
+  value = "192.168.1.100"
+  ttl   = 3600
 }
 
 # Créer un enregistrement CNAME
 resource "lws_dns_record" "blog" {
-  zone_name = "mondomaine.fr"
-  name      = "blog"
-  type      = "CNAME"
-  value     = "www.mondomaine.fr"
-  ttl       = 3600
+  zone  = "mondomaine.fr"
+  name  = "blog"
+  type  = "CNAME"
+  value = "www.mondomaine.fr"
+  ttl   = 3600
 }
 ```
 
@@ -130,6 +133,39 @@ make testacc
 # Tests avec coverage
 make test-coverage
 ```
+
+## 🔧 Debug et Troubleshooting
+
+### Logs de debug détaillés
+
+```bash
+export TF_LOG=DEBUG
+terraform plan
+terraform apply
+```
+
+Les logs de debug incluent :
+- 🔍 Détails des requêtes/réponses API
+- 🎯 Suivi des IDs et détection des drifts
+- ⚠️ Erreurs de validation et avertissements
+- 📊 Opérations de gestion du state
+
+### Problèmes courants
+
+#### Changements d'ID de records
+L'API LWS peut changer les IDs lors des mises à jour. Le provider détecte automatiquement ces changements et met à jour le state - aucune intervention manuelle requise.
+
+#### Import d'enregistrements existants
+```bash
+terraform import lws_dns_record.example 12345
+```
+
+### Validation des champs
+Le provider valide tous les champs requis avant les appels API :
+- `name`: Ne peut pas être vide ou contenir seulement des espaces
+- `type`: Doit être un type DNS valide
+- `value`: Ne peut pas être vide ou contenir seulement des espaces
+- `zone`: Doit être un nom de domaine valide
 
 ## 🤝 Contribution
 
