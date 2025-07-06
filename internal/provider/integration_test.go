@@ -88,21 +88,13 @@ func setupTestServer() *httptest.Server {
 
 		case http.MethodGet:
 			// Handle GET - Get zone/records
-			// Return the created record if it exists
+			// Return the created record if it exists, empty list if deleted
 			var records []client.DNSRecord
 			if createdRecord != nil {
 				records = []client.DNSRecord{*createdRecord}
 			} else {
-				// Default record if none created yet
-				records = []client.DNSRecord{
-					{
-						ID:    1,
-						Name:  "test",
-						Type:  "A",
-						Value: "192.0.2.1",
-						TTL:   3600,
-					},
-				}
+				// Return empty list when no records exist (e.g., after deletion)
+				records = []client.DNSRecord{}
 			}
 
 			response := client.LWSAPIResponse{
@@ -432,6 +424,157 @@ func TestProvider_UpdatePreservesID(t *testing.T) {
 	}
 
 	t.Logf("✅ ID preservation test passed! ID %d preserved through update cycle", originalID)
+}
+
+// Test for the specific issue: apply → modify → apply → plan (read) should preserve state
+func TestProvider_ApplyModifyApplyPlanWorkflow(t *testing.T) {
+	// Create test server
+	server := setupTestServer()
+	defer server.Close()
+
+	// Create LWS client
+	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true)
+	ctx := context.Background()
+
+	// Step 1: Initial apply (create)
+	t.Log("Step 1: Initial apply (create)")
+	record := &client.DNSRecord{
+		Name:  "www",
+		Type:  "A",
+		Value: "192.168.1.1",
+		Zone:  "example.com",
+		TTL:   3600,
+	}
+
+	createdRecord, err := lwsClient.CreateDNSRecord(ctx, record)
+	if err != nil {
+		t.Fatalf("Failed to create DNS record: %v", err)
+	}
+	originalID := createdRecord.ID
+	t.Logf("✅ Created record with ID: %d", originalID)
+
+	// Step 2: Modify + apply (update)
+	t.Log("Step 2: Modify + apply (update)")
+	createdRecord.Value = "192.168.1.2"
+	updatedRecord, err := lwsClient.UpdateDNSRecord(ctx, createdRecord)
+	if err != nil {
+		t.Fatalf("Failed to update DNS record: %v", err)
+	}
+
+	if updatedRecord.ID != originalID {
+		t.Errorf("ID changed during update! Original: %d, Updated: %d", originalID, updatedRecord.ID)
+	}
+	t.Logf("✅ Updated record, ID preserved: %d", updatedRecord.ID)
+
+	// Step 3: Plan (read) - This is where the bug usually manifests
+	t.Log("Step 3: Plan (read) - checking if resource state is preserved")
+	readRecord, err := lwsClient.GetDNSRecord(ctx, "example.com", fmt.Sprintf("%d", originalID))
+	if err != nil {
+		t.Fatalf("Failed to read DNS record after update (this simulates terraform plan): %v", err)
+	}
+
+	// Verify all data is consistent
+	if readRecord.ID != originalID {
+		t.Errorf("❌ Read returned different ID! Expected: %d, Got: %d", originalID, readRecord.ID)
+	}
+	if readRecord.Value != "192.168.1.2" {
+		t.Errorf("❌ Read returned wrong value! Expected: 192.168.1.2, Got: %s", readRecord.Value)
+	}
+	if readRecord.Name != "www" {
+		t.Errorf("❌ Read returned wrong name! Expected: www, Got: %s", readRecord.Name)
+	}
+	if readRecord.Type != "A" {
+		t.Errorf("❌ Read returned wrong type! Expected: A, Got: %s", readRecord.Type)
+	}
+
+	t.Logf("✅ Read successful - ID: %d, Name: %s, Type: %s, Value: %s",
+		readRecord.ID, readRecord.Name, readRecord.Type, readRecord.Value)
+
+	// Step 4: Another plan (read) to double-check consistency
+	t.Log("Step 4: Second plan (read) - ensuring consistent state")
+	readRecord2, err := lwsClient.GetDNSRecord(ctx, "example.com", fmt.Sprintf("%d", originalID))
+	if err != nil {
+		t.Fatalf("Failed second read (this simulates another terraform plan): %v", err)
+	}
+
+	if readRecord2.ID != originalID {
+		t.Errorf("❌ Second read returned different ID! Expected: %d, Got: %d", originalID, readRecord2.ID)
+	}
+
+	t.Log("✅ Apply → Modify → Apply → Plan → Plan workflow completed successfully!")
+	t.Logf("   Final state: ID=%d, Name=%s, Type=%s, Value=%s, TTL=%d",
+		readRecord2.ID, readRecord2.Name, readRecord2.Type, readRecord2.Value, readRecord2.TTL)
+}
+
+// Test deletion workflow
+func TestProvider_DeletionWorkflow(t *testing.T) {
+	// Create test server
+	server := setupTestServer()
+	defer server.Close()
+
+	// Create LWS client
+	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true)
+	ctx := context.Background()
+
+	// Step 1: Create a record
+	t.Log("Step 1: Creating record for deletion test")
+	record := &client.DNSRecord{
+		Name:  "to-delete",
+		Type:  "A",
+		Value: "192.168.1.100",
+		Zone:  "example.com",
+		TTL:   3600,
+	}
+
+	createdRecord, err := lwsClient.CreateDNSRecord(ctx, record)
+	if err != nil {
+		t.Fatalf("Failed to create DNS record: %v", err)
+	}
+	recordID := createdRecord.ID
+	t.Logf("✅ Created record with ID: %d", recordID)
+
+	// Step 2: Verify record exists
+	t.Log("Step 2: Verifying record exists before deletion")
+	readRecord, err := lwsClient.GetDNSRecord(ctx, "example.com", fmt.Sprintf("%d", recordID))
+	if err != nil {
+		t.Fatalf("Failed to read record before deletion: %v", err)
+	}
+	if readRecord.ID != recordID {
+		t.Errorf("Record ID mismatch before deletion. Expected: %d, Got: %d", recordID, readRecord.ID)
+	}
+	t.Logf("✅ Record exists with ID: %d", readRecord.ID)
+
+	// Step 3: Delete the record
+	t.Log("Step 3: Deleting record")
+	err = lwsClient.DeleteDNSRecord(ctx, recordID, "example.com")
+	if err != nil {
+		t.Fatalf("Failed to delete DNS record: %v", err)
+	}
+	t.Logf("✅ Deletion API call successful for ID: %d", recordID)
+
+	// Step 4: Verify record no longer exists
+	t.Log("Step 4: Verifying record is deleted")
+	deletedRecord, err := lwsClient.GetDNSRecord(ctx, "example.com", fmt.Sprintf("%d", recordID))
+	if err == nil {
+		t.Errorf("❌ Record still exists after deletion! ID: %d, Name: %s", deletedRecord.ID, deletedRecord.Name)
+	} else {
+		t.Logf("✅ Record correctly not found after deletion: %v", err)
+	}
+
+	// Step 5: Verify the zone doesn't contain the deleted record
+	t.Log("Step 5: Verifying zone doesn't contain deleted record")
+	zone, err := lwsClient.GetDNSZone(ctx, "example.com")
+	if err != nil {
+		t.Fatalf("Failed to get DNS zone: %v", err)
+	}
+
+	for _, record := range zone.Records {
+		if record.ID == recordID {
+			t.Errorf("❌ Deleted record still found in zone! ID: %d, Name: %s", record.ID, record.Name)
+		}
+	}
+
+	t.Log("✅ Deletion workflow completed successfully!")
 }
 
 func TestProvider_AllTestsPassed(t *testing.T) {

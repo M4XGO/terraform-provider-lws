@@ -496,6 +496,7 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 	})
 
 	// Update the model with refreshed data
+	data.ID = types.StringValue(fmt.Sprintf("%d", record.ID))
 	data.Name = types.StringValue(record.Name)
 	data.Type = types.StringValue(record.Type)
 	data.Value = types.StringValue(record.Value)
