@@ -374,7 +374,8 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 						data.Type = types.StringValue(createdRecord.Type)
 						data.Value = types.StringValue(createdRecord.Value)
 						data.TTL = types.Int64Value(int64(createdRecord.TTL))
-						data.Zone = types.StringValue(createdRecord.Zone)
+						// Keep the original zone from configuration, not from API response
+						data.Zone = types.StringValue(zoneName)
 
 						// Add informational warning
 						resp.Diagnostics.AddWarning(
@@ -443,7 +444,8 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 	data.Type = types.StringValue(createdRecord.Type)
 	data.Value = types.StringValue(createdRecord.Value)
 	data.TTL = types.Int64Value(int64(createdRecord.TTL))
-	data.Zone = types.StringValue(createdRecord.Zone)
+	// Keep the original zone from configuration, not from API response
+	data.Zone = types.StringValue(zoneName)
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
@@ -843,7 +845,8 @@ func (r *DNSRecordResource) Update(ctx context.Context, req resource.UpdateReque
 	data.Type = types.StringValue(updatedRecord.Type)
 	data.Value = types.StringValue(updatedRecord.Value)
 	data.TTL = types.Int64Value(int64(updatedRecord.TTL))
-	data.Zone = types.StringValue(updatedRecord.Zone)
+	// Keep the original zone from configuration, not from API response
+	data.Zone = types.StringValue(zoneName)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
