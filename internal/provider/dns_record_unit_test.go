@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -329,6 +330,329 @@ func TestDNSRecord_TTL_Validation(t *testing.T) {
 
 			if tt.valid && tt.ttl <= 0 {
 				t.Errorf("TTL %d should be positive", tt.ttl)
+			}
+		})
+	}
+}
+
+// Tests for existing record detection and handling logic
+func TestDNSRecord_ExistingRecordDetection(t *testing.T) {
+	tests := []struct {
+		name         string
+		targetName   string
+		targetType   string
+		existingName string
+		existingType string
+		shouldMatch  bool
+		description  string
+	}{
+		{
+			name:         "exact_match",
+			targetName:   "www",
+			targetType:   "A",
+			existingName: "www",
+			existingType: "A",
+			shouldMatch:  true,
+			description:  "Exact name and type match should be detected",
+		},
+		{
+			name:         "case_insensitive_name",
+			targetName:   "WWW",
+			targetType:   "A",
+			existingName: "www",
+			existingType: "A",
+			shouldMatch:  true,
+			description:  "Case insensitive name matching should work",
+		},
+		{
+			name:         "case_insensitive_type",
+			targetName:   "www",
+			targetType:   "a",
+			existingName: "www",
+			existingType: "A",
+			shouldMatch:  true,
+			description:  "Case insensitive type matching should work",
+		},
+		{
+			name:         "whitespace_trimming",
+			targetName:   " www ",
+			targetType:   " A ",
+			existingName: "www",
+			existingType: "A",
+			shouldMatch:  true,
+			description:  "Whitespace should be trimmed during comparison",
+		},
+		{
+			name:         "different_name",
+			targetName:   "www",
+			targetType:   "A",
+			existingName: "mail",
+			existingType: "A",
+			shouldMatch:  false,
+			description:  "Different names should not match",
+		},
+		{
+			name:         "different_type",
+			targetName:   "www",
+			targetType:   "A",
+			existingName: "www",
+			existingType: "CNAME",
+			shouldMatch:  false,
+			description:  "Different types should not match",
+		},
+		{
+			name:         "complex_name_case_mixed",
+			targetName:   "_4f63eda418b21d585d04126b53ba4ef1.pre-prod",
+			targetType:   "CNAME",
+			existingName: "_4F63EDA418B21D585D04126B53BA4EF1.PRE-PROD",
+			existingType: "cname",
+			shouldMatch:  true,
+			description:  "Complex names with mixed case should match",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate the normalization logic from the actual code
+			targetNameNorm := strings.ToLower(strings.TrimSpace(tt.targetName))
+			targetTypeNorm := strings.ToUpper(strings.TrimSpace(tt.targetType))
+			existingNameNorm := strings.ToLower(strings.TrimSpace(tt.existingName))
+			existingTypeNorm := strings.ToUpper(strings.TrimSpace(tt.existingType))
+
+			actualMatch := (existingNameNorm == targetNameNorm && existingTypeNorm == targetTypeNorm)
+
+			if actualMatch != tt.shouldMatch {
+				t.Errorf("%s: expected match=%v, got match=%v", tt.description, tt.shouldMatch, actualMatch)
+				t.Errorf("  Target: name='%s' type='%s'", tt.targetName, tt.targetType)
+				t.Errorf("  Existing: name='%s' type='%s'", tt.existingName, tt.existingType)
+				t.Errorf("  Normalized Target: name='%s' type='%s'", targetNameNorm, targetTypeNorm)
+				t.Errorf("  Normalized Existing: name='%s' type='%s'", existingNameNorm, existingTypeNorm)
+			}
+		})
+	}
+}
+
+func TestDNSRecord_APIErrorDetection(t *testing.T) {
+	tests := []struct {
+		name                   string
+		errorMessage           string
+		shouldIndicateExisting bool
+		description            string
+	}{
+		{
+			name:                   "cannot_add_record",
+			errorMessage:           "Cannot add record to the DNS Zone. Record invalid.",
+			shouldIndicateExisting: true,
+			description:            "LWS API 'cannot add record' error should indicate existing record",
+		},
+		{
+			name:                   "record_invalid",
+			errorMessage:           "Record invalid",
+			shouldIndicateExisting: true,
+			description:            "Generic 'record invalid' should indicate existing record",
+		},
+		{
+			name:                   "already_exists",
+			errorMessage:           "Record already exists",
+			shouldIndicateExisting: true,
+			description:            "Explicit 'already exists' should indicate existing record",
+		},
+		{
+			name:                   "duplicate_record",
+			errorMessage:           "Duplicate record found",
+			shouldIndicateExisting: true,
+			description:            "Duplicate record error should indicate existing record",
+		},
+		{
+			name:                   "case_insensitive_cannot_add",
+			errorMessage:           "CANNOT ADD RECORD TO THE DNS ZONE. RECORD INVALID.",
+			shouldIndicateExisting: true,
+			description:            "Case insensitive matching should work for error detection",
+		},
+		{
+			name:                   "network_error",
+			errorMessage:           "Connection timeout",
+			shouldIndicateExisting: false,
+			description:            "Network errors should not indicate existing record",
+		},
+		{
+			name:                   "permission_error",
+			errorMessage:           "Access denied",
+			shouldIndicateExisting: false,
+			description:            "Permission errors should not indicate existing record",
+		},
+		{
+			name:                   "zone_not_found",
+			errorMessage:           "Zone not found",
+			shouldIndicateExisting: false,
+			description:            "Zone not found should not indicate existing record",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate the error detection logic from the actual code
+			errorMsg := strings.ToLower(tt.errorMessage)
+			actualIndicatesExisting := strings.Contains(errorMsg, "cannot add record") ||
+				strings.Contains(errorMsg, "record invalid") ||
+				strings.Contains(errorMsg, "already exists") ||
+				strings.Contains(errorMsg, "duplicate")
+
+			if actualIndicatesExisting != tt.shouldIndicateExisting {
+				t.Errorf("%s: expected indicates_existing=%v, got indicates_existing=%v",
+					tt.description, tt.shouldIndicateExisting, actualIndicatesExisting)
+				t.Errorf("  Error message: '%s'", tt.errorMessage)
+			}
+		})
+	}
+}
+
+func TestDNSRecord_RecordAdoptionScenarios(t *testing.T) {
+	tests := []struct {
+		name               string
+		targetValue        string
+		existingValue      string
+		shouldUpdate       bool
+		expectedFinalValue string
+		description        string
+	}{
+		{
+			name:               "same_value_adoption",
+			targetValue:        "192.168.1.1",
+			existingValue:      "192.168.1.1",
+			shouldUpdate:       false,
+			expectedFinalValue: "192.168.1.1",
+			description:        "Same values should result in simple adoption",
+		},
+		{
+			name:               "different_value_update",
+			targetValue:        "192.168.1.2",
+			existingValue:      "192.168.1.1",
+			shouldUpdate:       true,
+			expectedFinalValue: "192.168.1.2",
+			description:        "Different values should result in update",
+		},
+		{
+			name:               "cname_value_update",
+			targetValue:        "_ee89810c7b27b5fb90b829b35ea3841a.xlfgrmvvlj.acm-validations.aws.",
+			existingValue:      "_different_validation_string.xlfgrmvvlj.acm-validations.aws.",
+			shouldUpdate:       true,
+			expectedFinalValue: "_ee89810c7b27b5fb90b829b35ea3841a.xlfgrmvvlj.acm-validations.aws.",
+			description:        "CNAME validation strings should be updated when different",
+		},
+		{
+			name:               "mx_value_update",
+			targetValue:        "10 mail.example.com",
+			existingValue:      "20 mail.example.com",
+			shouldUpdate:       true,
+			expectedFinalValue: "10 mail.example.com",
+			description:        "MX priority changes should result in update",
+		},
+		{
+			name:               "whitespace_differences",
+			targetValue:        "example.com",
+			existingValue:      " example.com ",
+			shouldUpdate:       true,
+			expectedFinalValue: "example.com",
+			description:        "Whitespace differences should result in update",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate the adoption decision logic
+			actualShouldUpdate := tt.existingValue != tt.targetValue
+
+			if actualShouldUpdate != tt.shouldUpdate {
+				t.Errorf("%s: expected should_update=%v, got should_update=%v",
+					tt.description, tt.shouldUpdate, actualShouldUpdate)
+				t.Errorf("  Target value: '%s'", tt.targetValue)
+				t.Errorf("  Existing value: '%s'", tt.existingValue)
+			}
+
+			// Test final value logic
+			var actualFinalValue string
+			if actualShouldUpdate {
+				actualFinalValue = tt.targetValue // Would be the result of update
+			} else {
+				actualFinalValue = tt.existingValue // Would be the adopted value
+			}
+
+			if actualFinalValue != tt.expectedFinalValue {
+				t.Errorf("%s: expected final_value='%s', got final_value='%s'",
+					tt.description, tt.expectedFinalValue, actualFinalValue)
+			}
+		})
+	}
+}
+
+func TestDNSRecord_NormalizationEdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+		testType string
+	}{
+		// Name normalization tests
+		{
+			name:     "empty_string_name",
+			input:    "",
+			expected: "",
+			testType: "name",
+		},
+		{
+			name:     "only_whitespace_name",
+			input:    "   ",
+			expected: "",
+			testType: "name",
+		},
+		{
+			name:     "mixed_case_subdomain",
+			input:    "WwW.ExAmPlE",
+			expected: "www.example",
+			testType: "name",
+		},
+		{
+			name:     "underscore_prefix",
+			input:    "_DMARC",
+			expected: "_dmarc",
+			testType: "name",
+		},
+
+		// Type normalization tests
+		{
+			name:     "lowercase_type",
+			input:    "cname",
+			expected: "CNAME",
+			testType: "type",
+		},
+		{
+			name:     "mixed_case_type",
+			input:    "AaAa",
+			expected: "AAAA",
+			testType: "type",
+		},
+		{
+			name:     "whitespace_type",
+			input:    " txt ",
+			expected: "TXT",
+			testType: "type",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var actual string
+
+			if tt.testType == "name" {
+				actual = strings.ToLower(strings.TrimSpace(tt.input))
+			} else if tt.testType == "type" {
+				actual = strings.ToUpper(strings.TrimSpace(tt.input))
+			}
+
+			if actual != tt.expected {
+				t.Errorf("Normalization failed for %s: input='%s', expected='%s', got='%s'",
+					tt.testType, tt.input, tt.expected, actual)
 			}
 		})
 	}

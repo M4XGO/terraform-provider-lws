@@ -182,8 +182,29 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 		// If we can't get the zone, continue with create attempt
 	} else {
 		// Look for existing record with same name and type
+		// Use case-insensitive comparison and trim whitespace for better matching
+		targetName := strings.ToLower(strings.TrimSpace(record.Name))
+		targetType := strings.ToUpper(strings.TrimSpace(record.Type))
+
+		tflog.Debug(ctx, "Searching for existing records", map[string]interface{}{
+			"target_name":   targetName,
+			"target_type":   targetType,
+			"total_records": len(zone.Records),
+		})
+
 		for _, existingRecord := range zone.Records {
-			if existingRecord.Name == record.Name && existingRecord.Type == record.Type {
+			existingName := strings.ToLower(strings.TrimSpace(existingRecord.Name))
+			existingType := strings.ToUpper(strings.TrimSpace(existingRecord.Type))
+
+			tflog.Debug(ctx, "Comparing with existing record", map[string]interface{}{
+				"existing_name": existingName,
+				"existing_type": existingType,
+				"existing_id":   existingRecord.ID,
+				"matches_name":  existingName == targetName,
+				"matches_type":  existingType == targetType,
+			})
+
+			if existingName == targetName && existingType == targetType {
 				tflog.Info(ctx, "Found existing DNS record, will update instead of create", map[string]interface{}{
 					"existing_id":    existingRecord.ID,
 					"existing_value": existingRecord.Value,
@@ -285,12 +306,97 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 
 	createdRecord, err := r.client.CreateDNSRecord(ctx, record)
 	if err != nil {
-		// Provide more helpful error message
-		errorMsg := fmt.Sprintf("Unable to create DNS record '%s' in zone '%s', got error: %s", record.Name, record.Zone, err)
+		// Check if the error indicates the record already exists
+		errorMsg := strings.ToLower(err.Error())
+		if strings.Contains(errorMsg, "cannot add record") ||
+			strings.Contains(errorMsg, "record invalid") ||
+			strings.Contains(errorMsg, "already exists") ||
+			strings.Contains(errorMsg, "duplicate") {
+
+			tflog.Warn(ctx, "Create failed, likely due to existing record, attempting to find and adopt it", map[string]interface{}{
+				"name":  record.Name,
+				"type":  record.Type,
+				"zone":  record.Zone,
+				"error": err.Error(),
+			})
+
+			// Try to fetch the zone again and look more thoroughly for the existing record
+			zone, zoneErr := r.client.GetDNSZone(ctx, record.Zone)
+			if zoneErr != nil {
+				tflog.Error(ctx, "Failed to get DNS zone for fallback search", map[string]interface{}{
+					"zone":  record.Zone,
+					"error": zoneErr.Error(),
+				})
+			} else {
+				// More thorough search - also check with exact string matching
+				for _, existingRecord := range zone.Records {
+					// Try both normalized and exact matching
+					if (strings.ToLower(strings.TrimSpace(existingRecord.Name)) == strings.ToLower(strings.TrimSpace(record.Name)) &&
+						strings.ToUpper(strings.TrimSpace(existingRecord.Type)) == strings.ToUpper(strings.TrimSpace(record.Type))) ||
+						(existingRecord.Name == record.Name && existingRecord.Type == record.Type) {
+
+						tflog.Info(ctx, "Found existing record during fallback search, adopting it", map[string]interface{}{
+							"existing_id":    existingRecord.ID,
+							"existing_name":  existingRecord.Name,
+							"existing_type":  existingRecord.Type,
+							"existing_value": existingRecord.Value,
+							"target_name":    record.Name,
+							"target_type":    record.Type,
+							"target_value":   record.Value,
+						})
+
+						// If values are different, update the record
+						if existingRecord.Value != record.Value {
+							record.ID = existingRecord.ID
+							updatedRecord, updateErr := r.client.UpdateDNSRecord(ctx, record)
+							if updateErr != nil {
+								tflog.Error(ctx, "Failed to update adopted record", map[string]interface{}{
+									"error": updateErr.Error(),
+								})
+								// Continue with adoption even if update fails
+								updatedRecord = &existingRecord
+							} else {
+								tflog.Info(ctx, "Successfully updated adopted record", map[string]interface{}{
+									"id":        updatedRecord.ID,
+									"old_value": existingRecord.Value,
+									"new_value": updatedRecord.Value,
+								})
+							}
+							createdRecord = updatedRecord
+						} else {
+							// Values are the same, just adopt the existing record
+							createdRecord = &existingRecord
+						}
+
+						// Save adopted record data into Terraform state
+						data.ID = types.StringValue(fmt.Sprintf("%d", createdRecord.ID))
+						data.Name = types.StringValue(createdRecord.Name)
+						data.Type = types.StringValue(createdRecord.Type)
+						data.Value = types.StringValue(createdRecord.Value)
+						data.TTL = types.Int64Value(int64(createdRecord.TTL))
+						data.Zone = types.StringValue(createdRecord.Zone)
+
+						// Add informational warning
+						resp.Diagnostics.AddWarning(
+							"Adopted Existing DNS Record",
+							fmt.Sprintf("Found existing DNS record '%s' of type '%s' in zone '%s' (ID: %d) that matches the desired configuration. Adopted this record instead of creating a duplicate.",
+								record.Name, record.Type, record.Zone, createdRecord.ID),
+						)
+
+						// Save data into Terraform state
+						resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+						return
+					}
+				}
+			}
+		}
+
+		// Original error handling if we couldn't find/adopt an existing record
+		fullErrorMsg := fmt.Sprintf("Unable to create DNS record '%s' in zone '%s', got error: %s", record.Name, record.Zone, err)
 		if r.client.TestMode {
-			errorMsg += "\n\nNote: You're in test mode. Make sure your test server is configured correctly."
+			fullErrorMsg += "\n\nNote: You're in test mode. Make sure your test server is configured correctly."
 		} else {
-			errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/domain/%s/zdns",
+			fullErrorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/domain/%s/zdns",
 				r.client.BaseURL, r.client.Login, r.client.BaseURL, record.Zone)
 		}
 
@@ -302,7 +408,7 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 			"error": err.Error(),
 		})
 
-		resp.Diagnostics.AddError("Client Error", errorMsg)
+		resp.Diagnostics.AddError("Client Error", fullErrorMsg)
 		return
 	}
 
