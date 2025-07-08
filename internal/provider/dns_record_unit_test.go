@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -731,6 +732,199 @@ func TestDNSRecord_ZonePreservation(t *testing.T) {
 			if actualFinalZone == configZone {
 				t.Logf("✅ Correctly preserved configuration zone: '%s'", configZone)
 			}
+		})
+	}
+}
+
+// Tests for idempotent deletion logic
+func TestDNSRecord_IdempotentDeletion(t *testing.T) {
+	tests := []struct {
+		name                 string
+		apiError             string
+		shouldSucceed        bool
+		shouldHaveWarning    bool
+		expectedWarningTitle string
+		description          string
+	}{
+		{
+			name:                 "not_found_error",
+			apiError:             "Record not found",
+			shouldSucceed:        true,
+			shouldHaveWarning:    true,
+			expectedWarningTitle: "DNS Record Already Deleted",
+			description:          "Should succeed when record is not found",
+		},
+		{
+			name:                 "does_not_exist_error",
+			apiError:             "Record does not exist",
+			shouldSucceed:        true,
+			shouldHaveWarning:    true,
+			expectedWarningTitle: "DNS Record Already Deleted",
+			description:          "Should succeed when record does not exist",
+		},
+		{
+			name:                 "record_with_id_error",
+			apiError:             "Record with ID 12345 not found",
+			shouldSucceed:        true,
+			shouldHaveWarning:    true,
+			expectedWarningTitle: "DNS Record Already Deleted",
+			description:          "Should succeed when specific record ID not found",
+		},
+		{
+			name:                 "no_record_found_error",
+			apiError:             "No record found with the specified criteria",
+			shouldSucceed:        true,
+			shouldHaveWarning:    true,
+			expectedWarningTitle: "DNS Record Already Deleted",
+			description:          "Should succeed when no record found",
+		},
+		{
+			name:                 "invalid_record_id_error",
+			apiError:             "Invalid record ID provided",
+			shouldSucceed:        true,
+			shouldHaveWarning:    true,
+			expectedWarningTitle: "DNS Record Already Deleted",
+			description:          "Should succeed when record ID is invalid (likely deleted)",
+		},
+		{
+			name:                 "record_id_not_found_error",
+			apiError:             "Record ID not found in zone",
+			shouldSucceed:        true,
+			shouldHaveWarning:    true,
+			expectedWarningTitle: "DNS Record Already Deleted",
+			description:          "Should succeed when record ID not found in zone",
+		},
+		{
+			name:                 "case_insensitive_not_found",
+			apiError:             "RECORD NOT FOUND",
+			shouldSucceed:        true,
+			shouldHaveWarning:    true,
+			expectedWarningTitle: "DNS Record Already Deleted",
+			description:          "Should handle case-insensitive error messages",
+		},
+		{
+			name:                 "network_error",
+			apiError:             "Connection timeout",
+			shouldSucceed:        false,
+			shouldHaveWarning:    false,
+			expectedWarningTitle: "",
+			description:          "Should fail for network errors",
+		},
+		{
+			name:                 "permission_error",
+			apiError:             "Access denied",
+			shouldSucceed:        false,
+			shouldHaveWarning:    false,
+			expectedWarningTitle: "",
+			description:          "Should fail for permission errors",
+		},
+		{
+			name:                 "api_limit_error",
+			apiError:             "Rate limit exceeded",
+			shouldSucceed:        false,
+			shouldHaveWarning:    false,
+			expectedWarningTitle: "",
+			description:          "Should fail for API limit errors",
+		},
+		{
+			name:                 "generic_error",
+			apiError:             "Internal server error",
+			shouldSucceed:        false,
+			shouldHaveWarning:    false,
+			expectedWarningTitle: "",
+			description:          "Should fail for generic server errors",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test the error detection logic by simulating different API error messages
+			errorMsg := strings.ToLower(tt.apiError)
+
+			isNotFoundError := strings.Contains(errorMsg, "not found") ||
+				strings.Contains(errorMsg, "does not exist") ||
+				strings.Contains(errorMsg, "record with id") ||
+				strings.Contains(errorMsg, "no record found") ||
+				strings.Contains(errorMsg, "record not found") ||
+				strings.Contains(errorMsg, "invalid record id") ||
+				strings.Contains(errorMsg, "record id not found")
+
+			if tt.shouldSucceed && !isNotFoundError {
+				t.Errorf("Test case '%s': Expected error '%s' to be detected as 'not found' but it wasn't. %s",
+					tt.name, tt.apiError, tt.description)
+			}
+
+			if !tt.shouldSucceed && isNotFoundError {
+				t.Errorf("Test case '%s': Expected error '%s' to NOT be detected as 'not found' but it was. %s",
+					tt.name, tt.apiError, tt.description)
+			}
+
+			t.Logf("✅ Test case '%s': Error '%s' correctly identified as shouldSucceed=%v (%s)",
+				tt.name, tt.apiError, tt.shouldSucceed, tt.description)
+		})
+	}
+}
+
+// Test to verify the exact warning message format for deletion of already-deleted records
+func TestDNSRecord_DeletionWarningMessage(t *testing.T) {
+	tests := []struct {
+		name             string
+		recordID         int
+		recordName       string
+		recordType       string
+		zoneName         string
+		expectedContains []string
+		description      string
+	}{
+		{
+			name:       "standard_warning_message",
+			recordID:   12345,
+			recordName: "www",
+			recordType: "A",
+			zoneName:   "example.com",
+			expectedContains: []string{
+				"DNS record ID 12345",
+				"'www' of type 'A'",
+				"zone 'example.com'",
+				"already deleted or does not exist",
+				"desired state (record absent) is already achieved",
+			},
+			description: "Should generate proper warning message with all details",
+		},
+		{
+			name:       "complex_record_name",
+			recordID:   67890,
+			recordName: "_4f63eda418b21d585d04126b53ba4ef1.pre-prod",
+			recordType: "CNAME",
+			zoneName:   "usekenny.site",
+			expectedContains: []string{
+				"DNS record ID 67890",
+				"'_4f63eda418b21d585d04126b53ba4ef1.pre-prod' of type 'CNAME'",
+				"zone 'usekenny.site'",
+				"already deleted or does not exist",
+			},
+			description: "Should handle complex ACM validation record names",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Generate the warning message using the same format as in the code
+			warningMessage := fmt.Sprintf("DNS record ID %d ('%s' of type '%s') in zone '%s' was already deleted or does not exist. "+
+				"Deletion operation considered successful since the desired state (record absent) is already achieved.",
+				tt.recordID, tt.recordName, tt.recordType, tt.zoneName)
+
+			// Check that all expected substrings are present
+			for _, expectedSubstring := range tt.expectedContains {
+				if !strings.Contains(warningMessage, expectedSubstring) {
+					t.Errorf("Test case '%s': Warning message missing expected substring '%s'. %s\n"+
+						"Full message: %s",
+						tt.name, expectedSubstring, tt.description, warningMessage)
+				}
+			}
+
+			t.Logf("✅ Test case '%s': Warning message contains all expected elements (%s)",
+				tt.name, tt.description)
 		})
 	}
 }

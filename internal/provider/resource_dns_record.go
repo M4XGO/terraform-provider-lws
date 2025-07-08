@@ -928,12 +928,51 @@ func (r *DNSRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 	// Delete API call logic - using ID from state
 	err = r.client.DeleteDNSRecord(ctx, recordIDInt, zoneName)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Unable to delete DNS record ID %d ('%s' of type '%s') in zone '%s', got error: %s",
+		// Check if the error indicates the record doesn't exist anymore
+		errorMsg := strings.ToLower(err.Error())
+		if strings.Contains(errorMsg, "not found") ||
+			strings.Contains(errorMsg, "does not exist") ||
+			strings.Contains(errorMsg, "record with id") ||
+			strings.Contains(errorMsg, "no record found") ||
+			strings.Contains(errorMsg, "record not found") ||
+			strings.Contains(errorMsg, "invalid record id") ||
+			strings.Contains(errorMsg, "record id not found") {
+
+			tflog.Info(ctx, "DNS record already deleted or does not exist, considering deletion successful", map[string]interface{}{
+				"record_id":   recordIDInt,
+				"record_name": recordName,
+				"record_type": recordType,
+				"zone":        zoneName,
+				"error":       err.Error(),
+				"reason":      "record_not_found_already_deleted",
+			})
+
+			// Add informational warning to let user know the record was already gone
+			resp.Diagnostics.AddWarning(
+				"DNS Record Already Deleted",
+				fmt.Sprintf("DNS record ID %d ('%s' of type '%s') in zone '%s' was already deleted or does not exist. "+
+					"Deletion operation considered successful since the desired state (record absent) is already achieved.",
+					recordIDInt, recordName, recordType, zoneName),
+			)
+
+			// Consider the deletion successful since the record is gone
+			tflog.Info(ctx, "Successfully handled deletion of already-deleted DNS record", map[string]interface{}{
+				"record_id":   recordIDInt,
+				"record_name": recordName,
+				"record_type": recordType,
+				"zone":        zoneName,
+				"action":      "already_deleted",
+			})
+			return
+		}
+
+		// For other errors (network issues, permissions, etc.), still fail
+		fullErrorMsg := fmt.Sprintf("Unable to delete DNS record ID %d ('%s' of type '%s') in zone '%s', got error: %s",
 			recordIDInt, recordName, recordType, zoneName, err)
 		if r.client.TestMode {
-			errorMsg += "\n\nNote: You're in test mode. Make sure your test server is configured correctly."
+			fullErrorMsg += "\n\nNote: You're in test mode. Make sure your test server is configured correctly."
 		} else {
-			errorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/domain/%s/zdns",
+			fullErrorMsg += fmt.Sprintf("\n\nAPI Details:\n- Base URL: %s\n- Login: %s\n- Expected endpoint: %s/domain/%s/zdns",
 				r.client.BaseURL, r.client.Login, r.client.BaseURL, zoneName)
 		}
 
@@ -943,9 +982,10 @@ func (r *DNSRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 			"record_type": recordType,
 			"zone":        zoneName,
 			"error":       err.Error(),
+			"reason":      "api_error_not_not_found",
 		})
 
-		resp.Diagnostics.AddError("Client Error", errorMsg)
+		resp.Diagnostics.AddError("Client Error", fullErrorMsg)
 		return
 	}
 
