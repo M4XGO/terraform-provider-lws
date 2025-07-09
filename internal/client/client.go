@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -152,6 +153,36 @@ func (c *LWSClient) makeRequest(ctx context.Context, method, endpoint string, bo
 
 	var apiResp LWSAPIResponse
 	if err := json.Unmarshal(responseBody, &apiResp); err != nil {
+		// Check if the response is HTML instead of JSON (common with Cloudflare challenges)
+		responseStr := string(responseBody)
+		if strings.Contains(responseStr, "<!DOCTYPE html>") ||
+			strings.Contains(responseStr, "<html") ||
+			strings.Contains(responseStr, "Just a moment...") ||
+			strings.Contains(responseStr, "cloudflare") ||
+			strings.Contains(responseStr, "challenge") {
+
+			// Extract the main error info from the response if it contains JSON within
+			if strings.Contains(responseStr, "Invalid response from upstream server") {
+				return nil, fmt.Errorf("LWS API is temporarily protected by Cloudflare challenge system (HTTP %d). "+
+					"This is usually temporary and indicates either:\n"+
+					"1. High traffic or suspicious activity detected\n"+
+					"2. LWS API server is having temporary issues\n"+
+					"3. Rate limiting or IP blocking\n\n"+
+					"Solutions:\n"+
+					"- Wait a few minutes and try again\n"+
+					"- Check LWS status page for service issues\n"+
+					"- Contact LWS support if the issue persists\n\n"+
+					"Technical details: The API returned an HTML challenge page instead of JSON response",
+					resp.StatusCode)
+			}
+
+			return nil, fmt.Errorf("LWS API returned HTML challenge page instead of JSON (HTTP %d). "+
+				"This indicates the API is protected by Cloudflare and requires browser-based verification. "+
+				"This is usually temporary - wait a few minutes and try again. "+
+				"If this persists, check LWS service status or contact support", resp.StatusCode)
+		}
+
+		// For other JSON parsing errors, provide the original detailed error
 		return nil, fmt.Errorf("error unmarshaling response from %s (status %d, body: %q): %w", url, resp.StatusCode, string(responseBody), err)
 	}
 
