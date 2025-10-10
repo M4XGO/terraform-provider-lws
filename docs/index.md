@@ -60,6 +60,14 @@ provider "lws" {
   api_key   = "your-api-key"
   # Optional: specify a different API endpoint
   # base_url = "https://api.lws.net/v1"
+  # Optional: Timeout of API requests in seconds
+  # timeout = 30
+  # Optional: Number of retries for an API request
+  # retries = 3
+  # Optional: Delay between retries in seconds
+  # delay = 15
+  # Optional: Backoff multiplier for delay between retries
+  # backoff = 2
 }
 ```
 

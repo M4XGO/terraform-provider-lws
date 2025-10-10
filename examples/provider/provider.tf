@@ -14,4 +14,12 @@ provider "lws" {
 
   # Optional: Custom API endpoint
   # base_url = "https://api.lws.net/v1"
+  # Optional: API request timeout in seconds
+  # timeout = 30
+  # Optional: Number of retries for an API request
+  # retries = 3
+  # Optional: Delay between retries in seconds
+  # delay = 15
+  # Optional: Backoff multiplier for delay between retries
+  # backoff = 2
 }
