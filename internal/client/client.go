@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -95,6 +96,9 @@ func NewLWSClient(login, apiKey, baseURL string, testMode bool) *LWSClient {
 
 // makeRequest makes an HTTP request to the LWS API
 func (c *LWSClient) makeRequest(ctx context.Context, method, endpoint string, body interface{}) (*LWSAPIResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	var reqBody io.Reader
 	var reqBodyBytes []byte
 	if body != nil {
