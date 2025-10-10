@@ -21,6 +21,10 @@ type LWSClient struct {
 	BaseURL  string
 	TestMode bool
 	client   *http.Client
+	retries  int
+	delay    int
+	backoff  int
+	mu       sync.Mutex
 }
 
 // DNSRecord represents a DNS record
@@ -82,14 +86,17 @@ type UpdateDNSRecordRequest struct {
 }
 
 // NewLWSClient creates a new LWS API client
-func NewLWSClient(login, apiKey, baseURL string, testMode bool) *LWSClient {
+func NewLWSClient(login, apiKey, baseURL string, testMode bool, timeout int, retries int, delay int, backoff int) *LWSClient {
 	return &LWSClient{
 		Login:    login,
 		ApiKey:   apiKey,
 		BaseURL:  baseURL,
 		TestMode: testMode,
+		retries:  retries,
+		delay:    delay,
+		backoff:  backoff,
 		client: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: time.Duration(timeout) * time.Second,
 		},
 	}
 }
@@ -134,7 +141,27 @@ func (c *LWSClient) makeRequest(ctx context.Context, method, endpoint string, bo
 		log.Printf("[DEBUG] Request Body: %s", string(reqBodyBytes))
 	}
 
-	resp, err := c.client.Do(req)
+	var resp *http.Response
+	retry := 0
+	delay := c.delay
+	for {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		log.Printf("[DEBUG] Sending request: %d/%d", retry+1, c.retries+1)
+		resp, err = c.client.Do(req)
+		if err == nil && resp.StatusCode < 400 {
+			break
+		}
+		if retry < c.retries {
+			log.Printf("[DEBUG] Request error, retrying in %ds", delay)
+			time.Sleep(time.Duration(delay) * time.Second)
+			retry += 1
+			delay *= c.backoff
+			continue
+		}
+		break
+	}
 	if err != nil {
 		return nil, fmt.Errorf("error making HTTP request to %s: %w", url, err)
 	}

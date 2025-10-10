@@ -33,6 +33,10 @@ type LWSProviderModel struct {
 	ApiKey   types.String `tfsdk:"api_key"`
 	BaseUrl  types.String `tfsdk:"base_url"`
 	TestMode types.Bool   `tfsdk:"test_mode"`
+	Timeout  types.Int64  `tfsdk:"timeout"`
+	Retries  types.Int64  `tfsdk:"retries"`
+	Delay    types.Int64  `tfsdk:"delay"`
+	Backoff  types.Int64  `tfsdk:"backoff"`
 }
 
 func (p *LWSProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -58,6 +62,22 @@ func (p *LWSProvider) Schema(ctx context.Context, req provider.SchemaRequest, re
 			},
 			"test_mode": schema.BoolAttribute{
 				MarkdownDescription: "Enable test mode for LWS API. Defaults to false. Can also be set with the LWS_TEST_MODE environment variable.",
+				Optional:            true,
+			},
+			"timeout": schema.Int64Attribute{
+				MarkdownDescription: "Timeout for API requests in seconds. Defaults to 30 seconds.",
+				Optional:            true,
+			},
+			"retries": schema.Int64Attribute{
+				MarkdownDescription: "Number of retries for API requests. Defaults to 3.",
+				Optional:            true,
+			},
+			"delay": schema.Int64Attribute{
+				MarkdownDescription: "Delay between retries for API requests in seconds. Defaults to 15 seconds.",
+				Optional:            true,
+			},
+			"backoff": schema.Int64Attribute{
+				MarkdownDescription: "Backoff multiplier for delay between retries. Defaults to 2.",
 				Optional:            true,
 			},
 		},
@@ -104,6 +124,10 @@ func (p *LWSProvider) Configure(ctx context.Context, req provider.ConfigureReque
 	apiKey := os.Getenv("LWS_API_KEY")
 	baseUrl := os.Getenv("LWS_BASE_URL")
 	testMode := os.Getenv("LWS_TEST_MODE") == "true"
+	timeout := 30
+	retries := 3
+	delay := 15
+	backoff := 2
 
 	if !data.Login.IsNull() {
 		login = data.Login.ValueString()
@@ -119,6 +143,22 @@ func (p *LWSProvider) Configure(ctx context.Context, req provider.ConfigureReque
 
 	if !data.TestMode.IsNull() {
 		testMode = data.TestMode.ValueBool()
+	}
+
+	if !data.Timeout.IsNull() {
+		timeout = int(data.Timeout.ValueInt64())
+	}
+
+	if !data.Retries.IsNull() {
+		retries = int(data.Retries.ValueInt64())
+	}
+
+	if !data.Delay.IsNull() {
+		delay = int(data.Delay.ValueInt64())
+	}
+
+	if !data.Backoff.IsNull() {
+		backoff = int(data.Backoff.ValueInt64())
 	}
 
 	// Default base URL
@@ -147,12 +187,44 @@ func (p *LWSProvider) Configure(ctx context.Context, req provider.ConfigureReque
 		)
 	}
 
+	if timeout <= 0 {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("timeout"),
+			"Invalid timeout value",
+			"The timeout value must be a positive integer representing seconds.",
+		)
+	}
+
+	if retries < 0 {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("retries"),
+			"Invalid retries value",
+			"The retries value cannot be negative.",
+		)
+	}
+
+	if delay < 0 {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("delay"),
+			"Invalid delay value",
+			"The delay value cannot be negative.",
+		)
+	}
+
+	if backoff < 1 {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("backoff"),
+			"Invalid backoff value",
+			"The backoff value must be at least 1.",
+		)
+	}
+
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	// Create a new LWS client using the configuration values
-	lwsClient := client.NewLWSClient(login, apiKey, baseUrl, testMode)
+	lwsClient := client.NewLWSClient(login, apiKey, baseUrl, testMode, timeout, retries, delay, backoff)
 
 	// Make the LWS client available during DataSource and Resource
 	// type Configure methods.
