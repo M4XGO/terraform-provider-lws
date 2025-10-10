@@ -22,21 +22,21 @@ The LWS provider requires authentication credentials to manage DNS records. Conf
 ### Environment Variables
 
 ```shell
+export LWS_LOGIN="your-login"
 export LWS_API_KEY="your-api-key"
-export LWS_API_SECRET="your-api-secret"
 ```
 
 ### Provider Configuration
 
 ```hcl
 provider "lws" {
-  api_key    = "your-api-key"
-  api_secret = "your-api-secret"
+  login   = "your-login"
+  api_key = "your-api-key"
   # Optional: specify a different API endpoint
-  # endpoint = "https://api.lws.fr"
+  # base_url = "https://api.lws.net/v1"
 }
 ```
 
 ## API Documentation
 
-For more information about the LWS API, visit the [official API documentation](https://aide.lws.fr/a/268-api-dns). 
+For more information about the LWS API, visit the [official API documentation](https://aide.lws.fr/a/268-api-dns).

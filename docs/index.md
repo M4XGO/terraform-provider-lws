@@ -23,11 +23,11 @@ terraform {
 
 # Configure the LWS Provider
 provider "lws" {
-  api_key    = var.lws_api_key
-  api_secret = var.lws_api_secret
+  login   = var.login
+  api_key = var.lws_api_key
   
   # Optional: Custom API endpoint
-  # endpoint = "https://api.lws.fr"
+  # base_url = "https://api.lws.net/v1"
 }
 ```
 
@@ -48,18 +48,18 @@ The LWS provider requires authentication credentials to manage DNS records. Conf
 ### Environment Variables
 
 ```shell
+export LWS_LOGIN="your-login"
 export LWS_API_KEY="your-api-key"
-export LWS_API_SECRET="your-api-secret"
 ```
 
 ### Provider Configuration
 
 ```hcl
 provider "lws" {
-  api_key    = "your-api-key"
-  api_secret = "your-api-secret"
+  api_login = "your-login"
+  api_key   = "your-api-key"
   # Optional: specify a different API endpoint
-  # endpoint = "https://api.lws.fr"
+  # base_url = "https://api.lws.net/v1"
 }
 ```
 
