@@ -26,8 +26,8 @@ func TestLWSClient_CreateDNSRecord(t *testing.T) {
 		{
 			name: "successful creation",
 			createResponse: `{
-				"code": 200, 
-				"info": "Added a new line in the DNS Zone", 
+				"code": 200,
+				"info": "Added a new line in the DNS Zone",
 				"data": {
 					"type": "A",
 					"name": "www",
@@ -69,8 +69,8 @@ func TestLWSClient_CreateDNSRecord(t *testing.T) {
 		{
 			name: "API error during creation",
 			createResponse: `{
-				"code": 400, 
-				"info": "Invalid zone", 
+				"code": 400,
+				"info": "Invalid zone",
 				"data": null
 			}`,
 			getResponse:    "",
@@ -118,7 +118,7 @@ func TestLWSClient_CreateDNSRecord(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := NewLWSClient("testlogin", "testkey", server.URL, true)
+			client := NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 
 			record, err := client.CreateDNSRecord(context.Background(), tt.record)
 
@@ -215,7 +215,7 @@ func TestLWSClient_GetDNSRecord(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := NewLWSClient("testlogin", "testkey", server.URL, true)
+			client := NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 
 			record, err := client.GetDNSRecord(context.Background(), "example.com", tt.recordID)
 
@@ -255,21 +255,21 @@ func TestLWSClient_UpdateDNSRecord(t *testing.T) {
 		// Return success response
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{
-			"code": 200, 
-			"info": "Record updated", 
+			"code": 200,
+			"info": "Record updated",
 			"data": {
-				"id": 12345, 
-				"name": "www", 
-				"type": "A", 
-				"value": "192.168.1.2", 
-				"zone": "example.com", 
+				"id": 12345,
+				"name": "www",
+				"type": "A",
+				"value": "192.168.1.2",
+				"zone": "example.com",
 				"ttl": 3600
 			}
 		}`))
 	}))
 	defer server.Close()
 
-	client := NewLWSClient("testlogin", "testkey", server.URL, true)
+	client := NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 
 	record := &DNSRecord{
 		ID:    12345, // ID must be provided for update
@@ -302,7 +302,7 @@ func TestLWSClient_DeleteDNSRecord(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewLWSClient("testlogin", "testkey", server.URL, true)
+	client := NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 
 	err := client.DeleteDNSRecord(context.Background(), 12345, "example.com")
 	if err != nil {
@@ -338,7 +338,7 @@ func TestLWSClient_DeleteDNSRecordByID(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewLWSClient("testlogin", "testkey", server.URL, true)
+	client := NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 
 	err := client.DeleteDNSRecordByID(context.Background(), "12345", "example.com")
 	if err != nil {
@@ -453,7 +453,7 @@ func TestLWSClient_findDNSRecordByName(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := NewLWSClient("testlogin", "testkey", server.URL, true)
+			client := NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 
 			record, err := client.findDNSRecordByName(context.Background(), "example.com", tt.recordName, tt.recordType)
 
@@ -522,7 +522,7 @@ func TestLWSClient_GetDNSZone(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewLWSClient("testlogin", "testkey", server.URL, true)
+	client := NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 
 	zone, err := client.GetDNSZone(context.Background(), "example.com")
 	if err != nil {
@@ -556,12 +556,12 @@ func TestLWSClient_Authentication(t *testing.T) {
 			// For POST (create), return creation response without ID
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{
-				"code": 200, 
-				"info": "Added a new line in the DNS Zone", 
+				"code": 200,
+				"info": "Added a new line in the DNS Zone",
 				"data": {
-					"name": "test", 
-					"type": "A", 
-					"value": "1.1.1.1", 
+					"name": "test",
+					"type": "A",
+					"value": "1.1.1.1",
 					"ttl": 3600
 				}
 			}`))
@@ -569,14 +569,14 @@ func TestLWSClient_Authentication(t *testing.T) {
 			// For GET (zone retrieval), return zone format with ID
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{
-				"code": 200, 
-				"info": "Fetched DNS Zone", 
+				"code": 200,
+				"info": "Fetched DNS Zone",
 				"data": [
 					{
-						"id": 123, 
-						"name": "test", 
-						"type": "A", 
-						"value": "1.1.1.1", 
+						"id": 123,
+						"name": "test",
+						"type": "A",
+						"value": "1.1.1.1",
 						"ttl": 3600
 					}
 				]
@@ -586,7 +586,7 @@ func TestLWSClient_Authentication(t *testing.T) {
 	defer server.Close()
 
 	// Test with correct credentials
-	client := NewLWSClient("correctlogin", "correctkey", server.URL, false)
+	client := NewLWSClient("correctlogin", "correctkey", server.URL, false, 30, 0, 0, 0)
 	record := &DNSRecord{Name: "test", Type: "A", Value: "1.1.1.1", Zone: "test.com", TTL: 3600}
 	_, err := client.CreateDNSRecord(context.Background(), record)
 	if err != nil {
@@ -594,7 +594,7 @@ func TestLWSClient_Authentication(t *testing.T) {
 	}
 
 	// Test with incorrect credentials
-	client = NewLWSClient("wronglogin", "wrongkey", server.URL, false)
+	client = NewLWSClient("wronglogin", "wrongkey", server.URL, false, 30, 0, 0, 0)
 	_, err = client.CreateDNSRecord(context.Background(), record)
 	if err == nil {
 		t.Errorf("Expected error with incorrect credentials, got success")
@@ -607,7 +607,7 @@ func TestLWSClient_UpdateDNSRecord_RequiresID(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewLWSClient("testlogin", "testkey", server.URL, true)
+	client := NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 
 	record := &DNSRecord{
 		ID:    0, // Missing ID
@@ -635,7 +635,7 @@ func TestLWSClient_DeleteDNSRecord_RequiresID(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewLWSClient("testlogin", "testkey", server.URL, true)
+	client := NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 
 	err := client.DeleteDNSRecord(context.Background(), 0, "example.com")
 	if err == nil {
