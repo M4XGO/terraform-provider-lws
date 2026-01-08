@@ -23,11 +23,19 @@ terraform {
 
 # Configure the LWS Provider
 provider "lws" {
-  login   = var.login
+  login   = var.lws_login
   api_key = var.lws_api_key
-  
+
   # Optional: Custom API endpoint
   # base_url = "https://api.lws.net/v1"
+  # Optional: API request timeout in seconds
+  # timeout = 30
+  # Optional: Number of retries for an API request
+  # retries = 3
+  # Optional: Delay between retries in seconds
+  # delay = 15
+  # Optional: Backoff multiplier for delay between retries
+  # backoff = 2
 }
 ```
 
@@ -37,9 +45,13 @@ provider "lws" {
 ### Optional
 
 - `api_key` (String, Sensitive) LWS API key. Can also be set with the LWS_API_KEY environment variable.
+- `backoff` (Number) Backoff multiplier for delay between retries. Defaults to 2.
 - `base_url` (String) LWS API base URL. Defaults to https://api.lws.net/v1. Can also be set with the LWS_BASE_URL environment variable.
+- `delay` (Number) Delay between retries for API requests in seconds. Defaults to 15 seconds.
 - `login` (String) LWS login ID. Can also be set with the LWS_LOGIN environment variable.
+- `retries` (Number) Number of retries for API requests. Defaults to 3.
 - `test_mode` (Boolean) Enable test mode for LWS API. Defaults to false. Can also be set with the LWS_TEST_MODE environment variable.
+- `timeout` (Number) Timeout for API requests in seconds. Defaults to 30 seconds.
 
 ## Authentication
 
@@ -56,21 +68,13 @@ export LWS_API_KEY="your-api-key"
 
 ```hcl
 provider "lws" {
-  api_login = "your-login"
-  api_key   = "your-api-key"
+  login   = "your-login"
+  api_key = "your-api-key"
   # Optional: specify a different API endpoint
   # base_url = "https://api.lws.net/v1"
-  # Optional: Timeout of API requests in seconds
-  # timeout = 30
-  # Optional: Number of retries for an API request
-  # retries = 3
-  # Optional: Delay between retries in seconds
-  # delay = 15
-  # Optional: Backoff multiplier for delay between retries
-  # backoff = 2
 }
 ```
 
 ## API Documentation
 
-For more information about the LWS API, visit the [official API documentation](https://aide.lws.fr/a/268-api-dns). 
+For more information about the LWS API, visit the [official API documentation](https://aide.lws.fr/a/268-api-dns).
