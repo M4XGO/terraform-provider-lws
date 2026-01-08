@@ -138,7 +138,7 @@ func TestProvider_CompleteWorkflow(t *testing.T) {
 	defer server.Close()
 
 	// Create LWS client with mock server
-	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true)
+	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 
 	// Test 1: Create DNS record
 	record := &client.DNSRecord{
@@ -226,7 +226,7 @@ func TestProvider_ErrorHandling(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true)
+	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 
 	// Test error on create
 	record := &client.DNSRecord{
@@ -286,14 +286,14 @@ func TestProvider_Authentication(t *testing.T) {
 	defer server.Close()
 
 	// Test with correct credentials
-	lwsClient := client.NewLWSClient("correctlogin", "correctkey", server.URL, false)
+	lwsClient := client.NewLWSClient("correctlogin", "correctkey", server.URL, false, 30, 0, 0, 0)
 	_, err := lwsClient.GetDNSZone(context.Background(), "test.com")
 	if err != nil {
 		t.Errorf("Expected success with correct credentials, got error: %v", err)
 	}
 
 	// Test with incorrect credentials
-	lwsClient = client.NewLWSClient("wronglogin", "wrongkey", server.URL, false)
+	lwsClient = client.NewLWSClient("wronglogin", "wrongkey", server.URL, false, 30, 0, 0, 0)
 	_, err = lwsClient.GetDNSZone(context.Background(), "test.com")
 	if err == nil {
 		t.Error("Expected error with incorrect credentials, got success")
@@ -371,7 +371,7 @@ func TestProvider_UpdatePreservesID(t *testing.T) {
 	defer server.Close()
 
 	// Create LWS client
-	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true)
+	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 
 	ctx := context.Background()
 
@@ -433,7 +433,7 @@ func TestProvider_ApplyModifyApplyPlanWorkflow(t *testing.T) {
 	defer server.Close()
 
 	// Create LWS client
-	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true)
+	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 	ctx := context.Background()
 
 	// Step 1: Initial apply (create)
@@ -513,7 +513,7 @@ func TestProvider_DeletionWorkflow(t *testing.T) {
 	defer server.Close()
 
 	// Create LWS client
-	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true)
+	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 	ctx := context.Background()
 
 	// Step 1: Create a record
@@ -588,7 +588,7 @@ func TestProvider_IDDriftScenario(t *testing.T) {
 	defer server.Close()
 
 	// Create LWS client
-	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true)
+	lwsClient := client.NewLWSClient("testlogin", "testkey", server.URL, true, 30, 0, 0, 0)
 	ctx := context.Background()
 
 	// Step 1: Create a record
